@@ -1,0 +1,7 @@
+{
+  "name": "PureFlow RO Water",
+  "description": "A lightweight, user-friendly RO water subscription and delivery app designed for small towns. Features include mobile login, product browsing, subscription management, and an AI-powered water assistant.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
