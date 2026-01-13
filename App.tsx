@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
 import Navbar from './components/Navbar';
@@ -14,6 +14,11 @@ import Assistant from './components/Assistant';
 import Toast from './components/Toast';
 
 const App: React.FC = () => {
+  // Helper to save data instantly
+  const saveToStorage = (key: string, data: any) => {
+    localStorage.setItem(key, JSON.stringify(data));
+  };
+
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('pureflow_user');
     return saved ? JSON.parse(saved) : null;
@@ -31,6 +36,7 @@ const App: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<View>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
+  
   const [allOrders, setAllOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('pureflow_all_orders');
     return saved ? JSON.parse(saved) : [];
@@ -48,35 +54,8 @@ const App: React.FC = () => {
 
   const [activeToast, setActiveToast] = useState<{title: string, message: string} | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('pureflow_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('pureflow_user');
-    }
-  }, [user]);
-
-  useEffect(() => {
-    localStorage.setItem('pureflow_registered_users', JSON.stringify(registeredUsers));
-  }, [registeredUsers]);
-
-  useEffect(() => {
-    localStorage.setItem('pureflow_all_orders', JSON.stringify(allOrders));
-  }, [allOrders]);
-
-  useEffect(() => {
-    localStorage.setItem('pureflow_products', JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem('pureflow_notifications', JSON.stringify(notifications));
-  }, [notifications]);
-
-  useEffect(() => {
-    localStorage.setItem('pureflow_delivery_fee', deliveryFee.toString());
-  }, [deliveryFee]);
-
-  const addNotification = (title: string, message: string, type: AppNotification['type'], forAdmin: boolean, userMobile?: string) => {
+  // Core Sync Logic: Use direct writes in action handlers instead of just useEffect
+  const addNotification = useCallback((title: string, message: string, type: AppNotification['type'], forAdmin: boolean, userMobile?: string) => {
     const newNotif: AppNotification = {
       id: `notif-${Date.now()}`,
       title,
@@ -87,50 +66,61 @@ const App: React.FC = () => {
       forAdmin,
       userMobile
     };
-    setNotifications(prev => [newNotif, ...prev]);
+    setNotifications(prev => {
+      const updated = [newNotif, ...prev];
+      saveToStorage('pureflow_notifications', updated);
+      return updated;
+    });
     
     if (user) {
       if ((forAdmin && user.isAdmin) || (!forAdmin && user.mobile === userMobile)) {
         setActiveToast({ title, message });
       }
     }
-  };
+  }, [user]);
 
   const handleLogin = (mobile: string, name: string, address: string, pincode: string, avatar?: string) => {
     const ADMIN_MOBILE = '9999999999';
     const isAdmin = mobile === ADMIN_MOBILE; 
     const newUser: User = { mobile, name, address, pincode, avatar, isLoggedIn: true, isAdmin };
+    
     setUser(newUser);
+    saveToStorage('pureflow_user', newUser);
+
     setRegisteredUsers(prev => {
+      let updated;
       const existing = prev.find(u => u.mobile === mobile);
       if (existing) {
-        return prev.map(u => u.mobile === mobile ? newUser : u);
+        updated = prev.map(u => u.mobile === mobile ? newUser : u);
+      } else {
+        updated = [...prev, newUser];
       }
-      return [...prev, newUser];
+      saveToStorage('pureflow_registered_users', updated);
+      return updated;
     });
     setCurrentView('home');
   };
 
   const handleLogout = () => {
     setUser(null);
+    localStorage.removeItem('pureflow_user');
     setCurrentView('home');
     setCart([]);
   };
 
   const handleImportData = (data: any) => {
-    if (!data.registeredUsers || !data.allOrders || !data.products) {
+    if (!data.allOrders || !data.products) {
       alert("Invalid backup file format!");
       return;
     }
 
-    if (window.confirm("This will overwrite all current data with the backup. Continue?")) {
-      localStorage.setItem('pureflow_registered_users', JSON.stringify(data.registeredUsers));
-      localStorage.setItem('pureflow_all_orders', JSON.stringify(data.allOrders));
-      localStorage.setItem('pureflow_products', JSON.stringify(data.products));
-      localStorage.setItem('pureflow_notifications', JSON.stringify(data.notifications || []));
-      localStorage.setItem('pureflow_delivery_fee', (data.deliveryFee || DEFAULT_DELIVERY_FEE).toString());
+    if (window.confirm("CRITICAL: This will replace your local data with the backup file. Continue?")) {
+      saveToStorage('pureflow_registered_users', data.registeredUsers || []);
+      saveToStorage('pureflow_all_orders', data.allOrders);
+      saveToStorage('pureflow_products', data.products);
+      saveToStorage('pureflow_notifications', data.notifications || []);
+      saveToStorage('pureflow_delivery_fee', data.deliveryFee || DEFAULT_DELIVERY_FEE);
       
-      // Force reload to apply all restored states
       window.location.reload();
     }
   };
@@ -181,7 +171,12 @@ const App: React.FC = () => {
       history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${timestamp}`, note: 'Order placed by customer' }]
     };
 
-    setAllOrders([newOrder, ...allOrders]);
+    setAllOrders(prev => {
+      const updated = [newOrder, ...prev];
+      saveToStorage('pureflow_all_orders', updated);
+      return updated;
+    });
+
     setCart([]);
     setCurrentView('orders');
     
@@ -197,46 +192,64 @@ const App: React.FC = () => {
     const now = new Date();
     const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    setAllOrders(prev => prev.map(o => {
-      if (o.id === orderId) {
-        const historyEntry: StatusHistory = {
-          status,
-          timestamp: `${now.toLocaleDateString()} ${timestamp}`,
-          note: `Order marked as ${status.toLowerCase()} by admin`
-        };
+    setAllOrders(prev => {
+      const updated = prev.map(o => {
+        if (o.id === orderId) {
+          const historyEntry: StatusHistory = {
+            status,
+            timestamp: `${now.toLocaleDateString()} ${timestamp}`,
+            note: `Order marked as ${status.toLowerCase()} by admin`
+          };
 
-        addNotification(
-          `Order ${status}!`,
-          `Your order ${orderId} has been ${status.toLowerCase()}.`,
-          status === 'Delivered' ? 'delivery' : 'system',
-          false,
-          o.userMobile
-        );
+          addNotification(
+            `Order ${status}!`,
+            `Your order ${orderId} has been ${status.toLowerCase()}.`,
+            status === 'Delivered' ? 'delivery' : 'system',
+            false,
+            o.userMobile
+          );
 
-        return { 
-          ...o, 
-          status, 
-          history: [...o.history, historyEntry] 
-        };
-      }
-      return o;
-    }));
+          return { ...o, status, history: [...o.history, historyEntry] };
+        }
+        return o;
+      });
+      saveToStorage('pureflow_all_orders', updated);
+      return updated;
+    });
   };
 
   const markNotificationsAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    setNotifications(prev => {
+      const updated = prev.map(n => ({ ...n, isRead: true }));
+      saveToStorage('pureflow_notifications', updated);
+      return updated;
+    });
   };
 
   const clearNotifications = () => {
     setNotifications([]);
+    saveToStorage('pureflow_notifications', []);
   };
 
   const updateProduct = (updatedProduct: Product) => {
-    setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+    setProducts(prev => {
+      const updated = prev.map(p => p.id === updatedProduct.id ? updatedProduct : p);
+      saveToStorage('pureflow_products', updated);
+      return updated;
+    });
   };
 
   const addProduct = (newProduct: Product) => {
-    setProducts(prev => [newProduct, ...prev]);
+    setProducts(prev => {
+      const updated = [newProduct, ...prev];
+      saveToStorage('pureflow_products', updated);
+      return updated;
+    });
+  };
+
+  const handleUpdateDeliveryFee = (fee: number) => {
+    setDeliveryFee(fee);
+    saveToStorage('pureflow_delivery_fee', fee);
   };
 
   if (!user) {
@@ -246,33 +259,6 @@ const App: React.FC = () => {
   const userOrders = allOrders.filter(o => o.userMobile === user.mobile);
   const relevantNotifications = notifications.filter(n => (n.forAdmin && user.isAdmin) || (!n.forAdmin && n.userMobile === user.mobile));
   const unreadCount = relevantNotifications.filter(n => !n.isRead).length;
-
-  const renderView = () => {
-    switch (currentView) {
-      case 'home': return <Home products={products} onAddToCart={addToCart} />;
-      case 'cart': return <Cart items={cart} onUpdate={updateQuantity} onRemove={removeFromCart} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />;
-      case 'profile': return <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />;
-      case 'orders': return <Orders orders={userOrders} />;
-      case 'assistant': return <Assistant onBack={() => setCurrentView('home')} />;
-      case 'admin': return (
-        <Admin 
-          products={products} 
-          onUpdateProduct={updateProduct} 
-          onAddProduct={addProduct} 
-          orders={allOrders} 
-          onUpdateStatus={updateOrderStatus} 
-          onBack={() => setCurrentView('profile')}
-          deliveryFee={deliveryFee}
-          onUpdateDeliveryFee={setDeliveryFee}
-          registeredUsers={registeredUsers}
-          notifications={notifications}
-          onImportData={handleImportData}
-        />
-      );
-      case 'notifications': return <Notifications notifications={relevantNotifications} onMarkRead={markNotificationsAsRead} onClear={clearNotifications} onBack={() => setCurrentView('profile')} />;
-      default: return <Home products={products} onAddToCart={addToCart} />;
-    }
-  };
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
@@ -306,7 +292,27 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 pt-6">
-        {renderView()}
+        {currentView === 'home' && <Home products={products} onAddToCart={addToCart} />}
+        {currentView === 'cart' && <Cart items={cart} onUpdate={updateQuantity} onRemove={removeFromCart} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
+        {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
+        {currentView === 'orders' && <Orders orders={userOrders} />}
+        {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
+        {currentView === 'admin' && (
+          <Admin 
+            products={products} 
+            onUpdateProduct={updateProduct} 
+            onAddProduct={addProduct} 
+            orders={allOrders} 
+            onUpdateStatus={updateOrderStatus} 
+            onBack={() => setCurrentView('profile')}
+            deliveryFee={deliveryFee}
+            onUpdateDeliveryFee={handleUpdateDeliveryFee}
+            registeredUsers={registeredUsers}
+            notifications={notifications}
+            onImportData={handleImportData}
+          />
+        )}
+        {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={markNotificationsAsRead} onClear={clearNotifications} onBack={() => setCurrentView('profile')} />}
       </main>
 
       {currentView !== 'assistant' && (
