@@ -73,13 +73,13 @@ const Admin: React.FC<AdminProps> = ({
   };
 
   const handleExportData = () => {
-    // Only export staff members, products, and fees.
-    // We filter out regular customers for privacy.
+    // Only export staff members, products, fees, and ACTIVE orders.
     const setupData = {
       registeredUsers: registeredUsers.filter(u => u.isDeliveryBoy || u.isAdmin),
       products: products,
       deliveryFee: deliveryFee,
-      allOrders: [], // Orders are local to device
+      // Include active orders so staff can see their assignments
+      allOrders: orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled'),
       notifications: []
     };
     
@@ -87,7 +87,7 @@ const Admin: React.FC<AdminProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `town-staff-setup.json`;
+    a.download = `town-tasks-update.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -295,17 +295,17 @@ const Admin: React.FC<AdminProps> = ({
              
              <div className="space-y-3 pt-4 border-t border-gray-50">
                <div className="bg-blue-50 p-4 rounded-2xl mb-2">
-                 <p className="text-[10px] text-blue-700 font-bold uppercase mb-1">How to set up staff:</p>
+                 <p className="text-[10px] text-blue-700 font-bold uppercase mb-1">How to send tasks to staff:</p>
                  <p className="text-[10px] text-blue-600 leading-relaxed">
-                   1. Add staff members in the "Staff" tab.<br/>
-                   2. Click "Export Town Setup" below.<br/>
-                   3. Send the downloaded file to your staff via WhatsApp.<br/>
-                   4. They should upload it on their Login screen.
+                   1. Assign tasks to staff in the "Orders" tab.<br/>
+                   2. Click "Export Tasks Update" below.<br/>
+                   3. Send the file to your staff via WhatsApp.<br/>
+                   4. They should click "Sync Tasks" on their dashboard.
                  </p>
                </div>
                <button onClick={handleExportData} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 active:scale-95 transition-transform">
                  <i className="fas fa-file-export"></i>
-                 Export Town Setup (JSON)
+                 Export Tasks Update (JSON)
                </button>
                <button onClick={() => importFileRef.current?.click()} className="w-full bg-gray-100 text-gray-700 py-4 rounded-2xl font-bold border border-gray-200 active:scale-95 transition-transform">
                  <i className="fas fa-file-import"></i>

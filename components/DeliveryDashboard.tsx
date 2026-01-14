@@ -6,13 +6,14 @@ interface DeliveryDashboardProps {
   orders: Order[];
   onUpdateStatus: (id: string, status: Order['status'], note?: string) => void;
   user: User;
+  isLive?: boolean;
 }
 
-const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({ orders, onUpdateStatus, user }) => {
+const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({ orders, onUpdateStatus, user, isLive }) => {
   const [activeTab, setActiveTab] = useState<'Pending' | 'History'>('Pending');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [orderNotes, setOrderNotes] = useState<Record<string, string>>({});
-  
+
   const pendingOrders = orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled');
   const historyOrders = orders.filter(o => o.status === 'Delivered' || o.status === 'Cancelled');
 
@@ -32,9 +33,8 @@ const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({ orders, onUpdateS
     }
 
     setProcessingId(orderId);
-    // Simulation of network delay
+    onUpdateStatus(orderId, status, note);
     setTimeout(() => {
-      onUpdateStatus(orderId, status, note);
       setProcessingId(null);
       setOrderNotes(prev => {
         const next = { ...prev };
@@ -60,7 +60,10 @@ const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({ orders, onUpdateS
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-black">Hello, {user.name.split(' ')[0]}!</h2>
-            <p className="text-green-100 text-xs font-medium">Manage your {pendingOrders.length} active delivery tasks.</p>
+            <div className="flex items-center gap-2">
+              <p className="text-green-100 text-xs font-medium">Manage your {pendingOrders.length} active delivery tasks.</p>
+              {isLive && <span className="text-[8px] bg-white/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Live Cloud Sync</span>}
+            </div>
           </div>
           <div className="h-12 w-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
             <i className="fas fa-truck-ramp-box text-xl"></i>
@@ -90,7 +93,8 @@ const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({ orders, onUpdateS
               <div className="h-16 w-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <i className="fas fa-circle-check text-2xl opacity-20"></i>
               </div>
-              <p className="text-sm font-medium">No active tasks assigned.</p>
+              <p className="text-sm font-medium">All clear! No active tasks.</p>
+              <p className="text-[10px] mt-2">New assignments from Admin will appear here instantly.</p>
             </div>
           ) : (
             pendingOrders.map(order => (
