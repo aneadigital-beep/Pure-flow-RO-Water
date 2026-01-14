@@ -85,6 +85,7 @@ const App: React.FC = () => {
 
   const handleLogin = (mobile: string, name: string, address: string, pincode: string, avatar?: string) => {
     const ADMIN_MOBILE = '9999999999';
+    // String comparisons for mobile IDs
     const existingInDb = registeredUsers.find(u => String(u.mobile) === String(mobile));
     
     const isAdmin = mobile === ADMIN_MOBILE || existingInDb?.isAdmin; 
@@ -154,7 +155,6 @@ const App: React.FC = () => {
     const now = new Date();
     const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    // Find the order context first to avoid side-effects inside state setter
     const orderToUpdate = allOrders.find(o => o.id === orderId);
     if (!orderToUpdate) return;
 
@@ -172,7 +172,6 @@ const App: React.FC = () => {
       });
     });
 
-    // Side effects belong outside the state setter function
     addNotification(
       `Order ${status}!`,
       `Your order ${orderId} is now ${status.toLowerCase()}. ${note ? '(' + note + ')' : ''}`,
@@ -218,23 +217,26 @@ const App: React.FC = () => {
   };
 
   const handleImportData = (data: any) => {
-    if (!data.allOrders || !data.products) {
-      alert("Invalid backup file!");
+    if (!data.products) {
+      alert("Invalid backup file! Make sure you are using a JSON file exported from the Admin panel.");
       return;
     }
-    if (window.confirm("Replace local data?")) {
-      setRegisteredUsers(data.registeredUsers || []);
-      setAllOrders(data.allOrders);
-      setProducts(data.products);
-      setNotifications(data.notifications || []);
-      setDeliveryFee(data.deliveryFee || DEFAULT_DELIVERY_FEE);
-      alert("Data imported successfully!");
-      window.location.reload();
-    }
+    
+    // Merge or Replace logic
+    setRegisteredUsers(data.registeredUsers || []);
+    setAllOrders(data.allOrders || []);
+    setProducts(data.products || INITIAL_PRODUCTS);
+    setNotifications(data.notifications || []);
+    setDeliveryFee(data.deliveryFee || DEFAULT_DELIVERY_FEE);
+    
+    setActiveToast({ 
+      title: "Data Synced", 
+      message: "Town information and staff lists updated. You can now login." 
+    });
   };
 
   if (!user) {
-    return <Login onLogin={handleLogin} registeredUsers={registeredUsers} />;
+    return <Login onLogin={handleLogin} registeredUsers={registeredUsers} onImportData={handleImportData} />;
   }
 
   const userOrders = allOrders.filter(o => String(o.userMobile) === String(user.mobile));

@@ -1,13 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
 
 interface LoginProps {
   onLogin: (mobile: string, name: string, address: string, pincode: string, avatar?: string) => void;
   registeredUsers: User[];
+  onImportData: (data: any) => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1); // 1: Mobile, 2: OTP, 3: Profile Details
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
@@ -17,6 +18,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
   const [avatar, setAvatar] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
   const [timer, setTimer] = useState(0);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let interval: any;
@@ -45,7 +48,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
       setIsLoading(true);
       // Simulate verification
       setTimeout(() => {
-        const existingUser = registeredUsers.find(u => u.mobile === mobile);
+        const existingUser = registeredUsers.find(u => String(u.mobile) === String(mobile));
         if (existingUser) {
           onLogin(
             existingUser.mobile, 
@@ -77,6 +80,22 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
     e.preventDefault();
     if (name && address && pincode) {
       onLogin(mobile, name, address, pincode, avatar);
+    }
+  };
+
+  const handleTownSetup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target?.result as string);
+          onImportData(data);
+        } catch (err) {
+          alert("Could not read setup file. Make sure you use the JSON file exported from the Admin panel Settings.");
+        }
+      };
+      reader.readAsText(file);
     }
   };
 
@@ -131,6 +150,26 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
             >
               {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Send OTP'}
             </button>
+            
+            {/* Added Staff Setup Option */}
+            <div className="pt-4 mt-4 border-t border-gray-50 text-center">
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Assigned Staff member?</p>
+              <button 
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-xs text-blue-600 font-bold hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
+              >
+                <i className="fas fa-file-import"></i>
+                Setup from Admin JSON
+              </button>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept=".json" 
+                onChange={handleTownSetup} 
+              />
+            </div>
           </form>
         )}
 

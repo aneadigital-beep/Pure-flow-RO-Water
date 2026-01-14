@@ -7,7 +7,7 @@ interface AdminProps {
   products: Product[];
   registeredUsers: User[];
   notifications: AppNotification[];
-  onUpdateStatus: (id: string, status: Order['status']) => void;
+  onUpdateStatus: (id: string, status: Order['status'], note?: string) => void;
   onUpdateProduct: (product: Product) => void;
   onAddProduct: (product: Product) => void;
   onBack: () => void;
@@ -72,16 +72,26 @@ const Admin: React.FC<AdminProps> = ({
     }
   };
 
-  const handleAdminComplete = (orderId: string, isAssigned: boolean) => {
-    if (isAssigned) {
-      if (window.confirm("This order is assigned to a delivery partner. Are you sure you want to manually mark it as Delivered?")) {
-        onUpdateStatus(orderId, 'Delivered');
-        setSelectedOrderId(null);
-      }
-    } else {
-      onUpdateStatus(orderId, 'Delivered');
-      setSelectedOrderId(null);
-    }
+  const handleExportData = () => {
+    // Only export staff members, products, and fees.
+    // We filter out regular customers for privacy.
+    const setupData = {
+      registeredUsers: registeredUsers.filter(u => u.isDeliveryBoy || u.isAdmin),
+      products: products,
+      deliveryFee: deliveryFee,
+      allOrders: [], // Orders are local to device
+      notifications: []
+    };
+    
+    const blob = new Blob([JSON.stringify(setupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `town-staff-setup.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   if (selectedOrder) {
@@ -157,19 +167,9 @@ const Admin: React.FC<AdminProps> = ({
           </div>
         </div>
 
-        {selectedOrder.status === 'Pending' && (
+        {selectedOrder.status !== 'Delivered' && selectedOrder.status !== 'Cancelled' && (
           <div className="grid grid-cols-1 gap-3">
-            <button 
-              onClick={() => handleAdminComplete(selectedOrder.id, isAssigned)} 
-              className={`w-full font-bold py-4 rounded-2xl shadow-lg transition-all ${
-                isAssigned 
-                  ? 'bg-gray-100 text-gray-500 border border-gray-200' 
-                  : 'bg-green-600 text-white'
-              }`}
-            >
-              {isAssigned ? 'Force Manual Delivery (Admin)' : 'Complete Order'}
-            </button>
-            <button 
+             <button 
               onClick={() => { if(window.confirm("Cancel this order?")) { onUpdateStatus(selectedOrder.id, 'Cancelled'); setSelectedOrderId(null); } }} 
               className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-2xl"
             >
@@ -208,23 +208,27 @@ const Admin: React.FC<AdminProps> = ({
         <div className="space-y-4 animate-in fade-in">
           <h3 className="font-bold text-gray-800">Order Logs</h3>
           <div className="space-y-3">
-            {orders.map(o => (
-              <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-xs font-bold ${o.status === 'Delivered' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
-                    {o.userName.charAt(0)}
+            {orders.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 text-sm italic">No orders logged.</div>
+            ) : (
+              orders.map(o => (
+                <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-xs font-bold ${o.status === 'Delivered' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
+                      {o.userName.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">{o.userName}</p>
+                      <p className="text-[10px] text-gray-400">Assigned: <span className="text-blue-500 font-bold">{o.assignedToName || 'None'}</span></p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-bold text-sm">{o.userName}</p>
-                    <p className="text-[10px] text-gray-400">Assigned: <span className="text-blue-500 font-bold">{o.assignedToName || 'None'}</span></p>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-blue-600">₹{o.total}</p>
+                    <span className={`text-[8px] font-bold uppercase ${o.status === 'Delivered' ? 'text-green-500' : 'text-orange-500'}`}>{o.status}</span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-blue-600">₹{o.total}</p>
-                  <span className={`text-[8px] font-bold uppercase ${o.status === 'Delivered' ? 'text-green-500' : 'text-orange-500'}`}>{o.status}</span>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}
@@ -288,12 +292,37 @@ const Admin: React.FC<AdminProps> = ({
                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Delivery Fee (₹)</label>
                <input type="number" value={deliveryFee} onChange={(e) => onUpdateDeliveryFee(parseInt(e.target.value) || 0)} className="w-full bg-gray-50 p-4 rounded-xl text-sm font-bold" />
              </div>
-             <button onClick={() => importFileRef.current?.click()} className="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold">Import Business Backup</button>
+             
+             <div className="space-y-3 pt-4 border-t border-gray-50">
+               <div className="bg-blue-50 p-4 rounded-2xl mb-2">
+                 <p className="text-[10px] text-blue-700 font-bold uppercase mb-1">How to set up staff:</p>
+                 <p className="text-[10px] text-blue-600 leading-relaxed">
+                   1. Add staff members in the "Staff" tab.<br/>
+                   2. Click "Export Town Setup" below.<br/>
+                   3. Send the downloaded file to your staff via WhatsApp.<br/>
+                   4. They should upload it on their Login screen.
+                 </p>
+               </div>
+               <button onClick={handleExportData} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 active:scale-95 transition-transform">
+                 <i className="fas fa-file-export"></i>
+                 Export Town Setup (JSON)
+               </button>
+               <button onClick={() => importFileRef.current?.click()} className="w-full bg-gray-100 text-gray-700 py-4 rounded-2xl font-bold border border-gray-200 active:scale-95 transition-transform">
+                 <i className="fas fa-file-import"></i>
+                 Import Data
+               </button>
+             </div>
+             
              <input type="file" ref={importFileRef} className="hidden" accept=".json" onChange={(e) => {
                const file = e.target.files?.[0];
                if (file) {
                  const reader = new FileReader();
-                 reader.onload = (ev) => onImportData(JSON.parse(ev.target?.result as string));
+                 reader.onload = (ev) => {
+                   try {
+                     const data = JSON.parse(ev.target?.result as string);
+                     onImportData(data);
+                   } catch(e) { alert("Error reading file. Ensure it is a valid JSON."); }
+                 };
                  reader.readAsText(file);
                }
              }} />
