@@ -6,11 +6,12 @@ interface ProfileProps {
   user: User;
   onLogout: () => void;
   onAdminClick: () => void;
+  onDeliveryClick: () => void;
   onNotificationsClick: () => void;
   unreadNotifCount: number;
 }
 
-const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onNotificationsClick, unreadNotifCount }) => {
+const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onDeliveryClick, onNotificationsClick, unreadNotifCount }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col items-center py-6">
@@ -20,14 +21,17 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onNotif
           ) : (
             <span className="text-blue-600 text-4xl font-bold">{user.name.charAt(0)}</span>
           )}
-          {user.isAdmin && (
-            <div className="absolute -bottom-1 -right-1 bg-yellow-400 text-white h-8 w-8 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-              <i className="fas fa-crown text-xs"></i>
+          {(user.isAdmin || user.isDeliveryBoy) && (
+            <div className={`absolute -bottom-1 -right-1 h-8 w-8 rounded-full flex items-center justify-center border-2 border-white shadow-sm ${user.isAdmin ? 'bg-yellow-400' : 'bg-green-500'}`}>
+              <i className={`fas ${user.isAdmin ? 'fa-crown' : 'fa-truck-fast'} text-white text-xs`}></i>
             </div>
           )}
         </div>
         <h2 className="text-xl font-bold text-gray-800">{user.name}</h2>
         <p className="text-gray-500 text-sm">{user.mobile}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600 mt-1">
+          {user.isAdmin ? 'Administrator' : user.isDeliveryBoy ? 'Delivery Partner' : 'Customer'}
+        </p>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-50 overflow-hidden">
@@ -43,6 +47,21 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onNotif
               <span className="text-sm font-bold">Manage Business (Admin)</span>
             </div>
             <i className="fas fa-chevron-right text-blue-300 text-sm"></i>
+          </button>
+        )}
+
+        {user.isDeliveryBoy && (
+          <button 
+            onClick={onDeliveryClick}
+            className="w-full p-4 flex items-center justify-between text-green-700 bg-green-50/50 hover:bg-green-50 transition-colors"
+          >
+            <div className="flex items-center gap-4">
+              <div className="h-10 w-10 rounded-lg bg-green-600 flex items-center justify-center text-white">
+                <i className="fas fa-truck-fast"></i>
+              </div>
+              <span className="text-sm font-bold">Delivery Dashboard</span>
+            </div>
+            <i className="fas fa-chevron-right text-green-300 text-sm"></i>
           </button>
         )}
 
@@ -69,30 +88,10 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onNotif
             <i className="fas fa-location-dot"></i>
           </div>
           <div className="flex-1">
-            <p className="text-[10px] text-gray-400 uppercase font-bold">Delivery Address</p>
+            <p className="text-[10px] text-gray-400 uppercase font-bold">Address</p>
             <p className="text-sm text-gray-700">{user.address}, {user.pincode}</p>
           </div>
         </div>
-        
-        <button className="w-full p-4 flex items-center justify-between text-gray-700 hover:bg-gray-50 transition-colors">
-          <div className="flex items-center gap-4">
-            <div className="h-10 w-10 rounded-lg bg-green-50 flex items-center justify-center text-green-600">
-              <i className="fas fa-wallet"></i>
-            </div>
-            <span className="text-sm font-medium">Payment Methods</span>
-          </div>
-          <i className="fas fa-chevron-right text-gray-300 text-sm"></i>
-        </button>
-
-        <button className="w-full p-4 flex items-center justify-between text-gray-700 hover:bg-gray-50 transition-colors">
-          <div className="flex items-center gap-4">
-            <div className="h-10 w-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600">
-              <i className="fas fa-headset"></i>
-            </div>
-            <span className="text-sm font-medium">Help & Support</span>
-          </div>
-          <i className="fas fa-chevron-right text-gray-300 text-sm"></i>
-        </button>
       </div>
 
       <button
@@ -101,10 +100,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onNotif
       >
         <i className="fas fa-right-from-bracket"></i> Logout
       </button>
-
-      <div className="text-center pt-8 opacity-20 text-[10px] font-bold tracking-widest uppercase">
-        Township PureFlow
-      </div>
     </div>
   );
 };

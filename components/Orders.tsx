@@ -19,6 +19,16 @@ const Orders: React.FC<OrdersProps> = ({ orders }) => {
     );
   }
 
+  const getStatusStyle = (status: Order['status']) => {
+    switch (status) {
+      case 'Delivered': return 'bg-green-100 text-green-600';
+      case 'Cancelled': return 'bg-red-100 text-red-600';
+      case 'Out for Delivery': return 'bg-blue-100 text-blue-600';
+      case 'Processing': return 'bg-yellow-100 text-yellow-600';
+      default: return 'bg-orange-100 text-orange-600';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-gray-800">Your Orders</h2>
@@ -31,9 +41,7 @@ const Orders: React.FC<OrdersProps> = ({ orders }) => {
                 <h3 className="font-bold text-gray-800">{order.date}</h3>
               </div>
               <div className="flex flex-col items-end gap-1">
-                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                  order.status === 'Delivered' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'
-                }`}>
+                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusStyle(order.status)}`}>
                   {order.status}
                 </span>
                 <span className="text-[10px] font-bold text-gray-400">
@@ -51,9 +59,16 @@ const Orders: React.FC<OrdersProps> = ({ orders }) => {
               ))}
             </div>
             
-            <div className="pt-2 border-t border-gray-50 flex justify-between items-center">
-              <span className="text-xs text-gray-400">Total</span>
-              <span className="font-bold text-gray-800">₹{order.total}</span>
+            <div className="pt-2 border-t border-gray-50">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400">Total</span>
+                <span className="font-bold text-gray-800">₹{order.total}</span>
+              </div>
+              {order.history.length > 1 && (
+                <p className="text-[10px] text-gray-400 mt-2 italic">
+                  Last Update: {order.history[order.history.length - 1].note}
+                </p>
+              )}
             </div>
           </div>
         ))}

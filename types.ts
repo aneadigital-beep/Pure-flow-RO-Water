@@ -22,10 +22,11 @@ export interface User {
   avatar?: string;
   isLoggedIn: boolean;
   isAdmin?: boolean;
+  isDeliveryBoy?: boolean;
 }
 
 export interface StatusHistory {
-  status: 'Pending' | 'Delivered' | 'Cancelled';
+  status: 'Pending' | 'Processing' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
   timestamp: string;
   note?: string;
 }
@@ -39,9 +40,11 @@ export interface Order {
   createdAt: string;
   total: number;
   items: CartItem[];
-  status: 'Pending' | 'Delivered' | 'Cancelled';
+  status: 'Pending' | 'Processing' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
   paymentMethod: 'COD' | 'UPI/Online';
   history: StatusHistory[];
+  assignedToMobile?: string;
+  assignedToName?: string;
 }
 
 export interface AppNotification {
@@ -55,4 +58,4 @@ export interface AppNotification {
   userMobile?: string;
 }
 
-export type View = 'home' | 'cart' | 'profile' | 'orders' | 'admin' | 'notifications' | 'assistant';
+export type View = 'home' | 'cart' | 'profile' | 'orders' | 'admin' | 'delivery' | 'notifications' | 'assistant';
