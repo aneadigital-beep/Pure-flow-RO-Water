@@ -100,24 +100,24 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-blue-600 px-6 py-12">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-blue-600 dark:bg-slate-950 px-6 py-12 transition-colors duration-500">
       {/* Brand Logo Section */}
       <div className="mb-10 text-center text-white">
-        <div className="h-20 w-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-          <i className="fas fa-droplet text-4xl text-blue-600"></i>
+        <div className="h-20 w-20 bg-white dark:bg-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+          <i className="fas fa-droplet text-4xl text-blue-600 dark:text-blue-400"></i>
         </div>
         <h1 className="text-3xl font-bold tracking-tight">PureFlow</h1>
         <p className="opacity-80 text-sm mt-1">Township's Premium Water Supply</p>
       </div>
 
-      <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden transition-colors">
         {/* Step Progress Indicator */}
         <div className="flex justify-center gap-1.5 mb-8">
           {[1, 2, 3].map((s) => (
             <div 
               key={s} 
               className={`h-1 rounded-full transition-all duration-300 ${
-                step === s ? 'w-8 bg-blue-600' : 'w-2 bg-gray-100'
+                step === s ? 'w-8 bg-blue-600 dark:bg-blue-400' : 'w-2 bg-gray-100 dark:bg-slate-800'
               }`} 
             />
           ))}
@@ -126,17 +126,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
         {step === 1 && (
           <form onSubmit={handleMobileSubmit} className="space-y-6 animate-in fade-in slide-in-from-right-4">
             <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome!</h2>
-              <p className="text-sm text-gray-500 mb-6">Enter your mobile number to receive a verification code.</p>
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Welcome!</h2>
+              <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Enter your mobile number to receive a verification code.</p>
               
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">+91</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-600 font-bold">+91</span>
                 <input
                   type="tel"
                   value={mobile}
                   onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   placeholder="00000 00000"
-                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-5 pl-14 pr-4 text-gray-800 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-semibold"
+                  className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-2xl py-5 pl-14 pr-4 text-gray-800 dark:text-slate-200 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-semibold"
                   required
                   autoFocus
                 />
@@ -146,18 +146,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
             <button
               type="submit"
               disabled={mobile.length < 10 || isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-400 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Send OTP'}
             </button>
             
-            {/* Added Staff Setup Option */}
-            <div className="pt-4 mt-4 border-t border-gray-50 text-center">
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Assigned Staff member?</p>
+            <div className="pt-4 mt-4 border-t border-gray-50 dark:border-slate-800 text-center">
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase tracking-widest mb-2">Assigned Staff member?</p>
               <button 
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="text-xs text-blue-600 font-bold hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
+                className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-900/30 px-3 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
               >
                 <i className="fas fa-file-import"></i>
                 Setup from Admin JSON
@@ -176,9 +175,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
         {step === 2 && (
           <form onSubmit={handleOtpSubmit} className="space-y-6 animate-in fade-in slide-in-from-right-4">
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Verify Mobile</h2>
-              <p className="text-sm text-gray-500">
-                OTP sent to <span className="font-bold text-gray-700">+91 {mobile}</span>
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Verify Mobile</h2>
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                OTP sent to <span className="font-bold text-gray-700 dark:text-slate-300">+91 {mobile}</span>
               </p>
             </div>
 
@@ -188,7 +187,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="0 0 0 0"
-                className="w-48 bg-gray-50 border border-gray-200 rounded-2xl py-4 text-center text-3xl tracking-[0.75rem] font-bold text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                className="w-48 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl py-4 text-center text-3xl tracking-[0.75rem] font-bold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 required
                 autoFocus
               />
@@ -198,19 +197,19 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
               <button
                 type="submit"
                 disabled={otp.length < 4 || isLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-400 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Verify & Continue'}
               </button>
               
               <div className="flex flex-col items-center gap-2">
                 {timer > 0 ? (
-                  <p className="text-xs text-gray-400 font-medium">Resend OTP in {timer}s</p>
+                  <p className="text-xs text-gray-400 dark:text-slate-500 font-medium">Resend OTP in {timer}s</p>
                 ) : (
                   <button 
                     type="button" 
                     onClick={() => setTimer(30)}
-                    className="text-blue-600 text-xs font-bold hover:underline"
+                    className="text-blue-600 dark:text-blue-400 text-xs font-bold hover:underline"
                   >
                     Resend OTP
                   </button>
@@ -218,7 +217,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
                 <button 
                   type="button" 
                   onClick={() => setStep(1)}
-                  className="text-gray-400 text-xs font-medium hover:text-gray-600"
+                  className="text-gray-400 dark:text-slate-600 text-xs font-medium hover:text-gray-600 dark:hover:text-slate-400"
                 >
                   Change Number
                 </button>
@@ -230,59 +229,59 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
         {step === 3 && (
           <form onSubmit={handleDetailsSubmit} className="space-y-4 animate-in fade-in slide-in-from-right-4">
             <div className="text-center mb-2">
-              <h2 className="text-xl font-bold text-gray-800 mb-1">Final Step</h2>
-              <p className="text-xs text-gray-500">Create your profile for easy delivery.</p>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100 mb-1">Final Step</h2>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Create your profile for easy delivery.</p>
             </div>
             
             <div className="flex flex-col items-center mb-4">
               <label className="relative cursor-pointer group">
-                <div className="h-24 w-24 rounded-3xl bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden transition-colors group-hover:border-blue-200">
+                <div className="h-24 w-24 rounded-3xl bg-gray-50 dark:bg-slate-950 border-2 border-dashed border-gray-200 dark:border-slate-800 flex items-center justify-center overflow-hidden transition-colors group-hover:border-blue-200 dark:group-hover:border-blue-800">
                   {avatar ? (
                     <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
                   ) : (
-                    <i className="fas fa-user-plus text-gray-300 text-2xl"></i>
+                    <i className="fas fa-user-plus text-gray-300 dark:text-slate-700 text-2xl"></i>
                   )}
                 </div>
-                <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white h-8 w-8 rounded-xl flex items-center justify-center border-2 border-white shadow-md">
+                <div className="absolute -bottom-2 -right-2 bg-blue-600 dark:bg-blue-500 text-white h-8 w-8 rounded-xl flex items-center justify-center border-2 border-white dark:border-slate-900 shadow-md">
                   <i className="fas fa-camera text-[12px]"></i>
                 </div>
                 <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
               </label>
-              <p className="text-[10px] text-gray-400 mt-3 font-bold uppercase tracking-wider">Photo (Optional)</p>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-3 font-bold uppercase tracking-wider">Photo (Optional)</p>
             </div>
 
             <div className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Full Name</label>
+                <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-600 ml-1">Full Name</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. John Doe"
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">House/Shop Address</label>
+                <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-600 ml-1">House/Shop Address</label>
                 <textarea
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Street name, Landmark, Building..."
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm h-20 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-medium"
+                  className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm h-20 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-medium dark:text-slate-200"
                   required
                 ></textarea>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Pincode</label>
+                <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-600 ml-1">Pincode</label>
                 <input
                   type="text"
                   value={pincode}
                   onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="600001"
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200"
                   required
                 />
               </div>
@@ -290,7 +289,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg mt-6 transition-all active:scale-95"
+              className="w-full bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-400 text-white py-4 rounded-2xl font-bold shadow-lg mt-6 transition-all active:scale-95"
             >
               Complete Registration
             </button>
@@ -298,7 +297,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
         )}
       </div>
 
-      <p className="mt-8 text-white/60 text-xs text-center leading-relaxed">
+      <p className="mt-8 text-white/60 dark:text-slate-500 text-xs text-center leading-relaxed">
         By continuing, you agree to our <br /> 
         <span className="underline cursor-pointer">Terms of Service</span> & <span className="underline cursor-pointer">Privacy Policy</span>
       </p>

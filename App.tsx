@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
-// Fixed: Import orderBy from our local firebase helper instead of directly from the library to fix v8 compatibility issues
 import { db, COLLECTIONS, syncCollection, upsertDocument, updateDocument, getDocument, orderBy } from './firebase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
@@ -18,31 +17,43 @@ import Toast from './components/Toast';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('pureflow_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('pureflow_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
   });
   
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('pureflow_dark_mode');
+    return saved === 'true';
+  });
+
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [deliveryFee, setDeliveryFee] = useState<number>(DEFAULT_DELIVERY_FEE);
-  const [isCloudSynced, setIsCloudSynced] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<View>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeToast, setActiveToast] = useState<{title: string, message: string} | null>(null);
+  const [appLoading, setAppLoading] = useState(true);
 
   useEffect(() => {
-    if (!db) {
-      setSyncError("Database not initialized. Check firebase.ts");
-      return;
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
     }
+    localStorage.setItem('pureflow_dark_mode', String(isDarkMode));
+  }, [isDarkMode]);
 
+  useEffect(() => {
+    // Sync collections using our new local persistence engine
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
       setAllOrders(data as Order[]);
-      setIsCloudSynced(true);
-      setSyncError(null);
+      setAppLoading(false);
     }, [orderBy('createdAt', 'desc')]);
 
     const unsubUsers = syncCollection(COLLECTIONS.USERS, (data) => {
@@ -92,7 +103,7 @@ const App: React.FC = () => {
 
   const handleLogin = async (mobile: string, name: string, address: string, pincode: string, avatar?: string) => {
     const ADMIN_MOBILE = '9999999999';
-    const existingCloudUser = await getDocument(COLLECTIONS.USERS, String(mobile));
+    const existingCloudUser = await getDocument(COLLECTIONS.USERS, String(mobile)) as any;
     const isAdmin = mobile === ADMIN_MOBILE || existingCloudUser?.isAdmin; 
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy;
 
@@ -181,6 +192,17 @@ const App: React.FC = () => {
     await updateDocument(COLLECTIONS.USERS, String(mobile), { isDeliveryBoy: isDelivery });
   };
 
+  const toggleDarkMode = () => setIsDarkMode(prev => !prev);
+
+  if (appLoading) {
+    return (
+      <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center text-white p-6">
+        <div className="h-16 w-16 border-4 border-white/20 border-t-white rounded-full animate-spin mb-4"></div>
+        <p className="font-bold text-lg animate-pulse">Initializing PureFlow...</p>
+      </div>
+    );
+  }
+
   if (!user) {
     return <Login onLogin={handleLogin} registeredUsers={registeredUsers} onImportData={(d) => {}} />;
   }
@@ -190,10 +212,10 @@ const App: React.FC = () => {
   const unreadCount = relevantNotifications.filter(n => !n.isRead).length;
 
   return (
-    <div className={`flex flex-col min-h-screen ${['admin', 'delivery', 'assistant'].includes(currentView) ? '' : 'pb-20'}`}>
+    <div className={`flex flex-col min-h-screen transition-colors duration-300 bg-slate-50 dark:bg-slate-900 ${['admin', 'delivery', 'assistant'].includes(currentView) ? '' : 'pb-20'}`}>
       {activeToast && <Toast title={activeToast.title} message={activeToast.message} onClose={() => setActiveToast(null)} />}
       
-      <header className={`text-white p-4 shadow-md sticky top-0 z-50 ${user.isDeliveryBoy ? 'bg-green-600' : 'bg-blue-600'}`}>
+      <header className={`text-white p-4 shadow-md sticky top-0 z-50 ${user.isDeliveryBoy ? 'bg-green-600 dark:bg-green-800' : 'bg-blue-600 dark:bg-blue-800'}`}>
         <div className="flex justify-between items-center max-w-2xl mx-auto">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('home')}>
@@ -201,25 +223,23 @@ const App: React.FC = () => {
               {TOWN_NAME}
             </h1>
             <div 
-              className={`h-2.5 w-2.5 rounded-full border border-white/20 ${syncError ? 'bg-red-500 animate-pulse' : isCloudSynced ? 'bg-green-400' : 'bg-orange-400 animate-pulse-soft'}`} 
-              title={syncError || (isCloudSynced ? "Cloud Connected" : "Connecting to Database...")}
+              className="h-2.5 w-2.5 rounded-full border border-white/20 bg-green-400" 
+              title="Local Persistence Active"
             ></div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button onClick={toggleDarkMode} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+              <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i>
+            </button>
             <button onClick={() => setCurrentView('notifications')} className="relative p-2 rounded-full hover:bg-white/10 transition-colors">
               <i className="fas fa-bell"></i>
-              {unreadCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full border border-blue-600"></span>}
+              {unreadCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full border border-blue-600 dark:border-blue-800"></span>}
             </button>
             <div className="h-8 w-8 rounded-full border border-white/20 overflow-hidden cursor-pointer" onClick={() => setCurrentView('profile')}>
               {user.avatar ? <img src={user.avatar} className="h-full w-full object-cover" alt="" /> : <div className="h-full w-full flex items-center justify-center text-xs font-bold uppercase bg-white/20">{user.name.charAt(0)}</div>}
             </div>
           </div>
         </div>
-        {syncError && (
-          <div className="bg-red-500 text-[10px] text-white text-center py-1 font-bold animate-in slide-in-from-top-2">
-            <i className="fas fa-exclamation-triangle mr-1"></i> {syncError}
-          </div>
-        )}
       </header>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 pt-6">
@@ -228,7 +248,7 @@ const App: React.FC = () => {
         {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
         {currentView === 'orders' && <Orders orders={userOrders} />}
         {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
-        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
+        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile))} onUpdateStatus={updateOrderStatus} user={user} isLive={true} />}
         {currentView === 'admin' && (
           <Admin 
             products={products} 
@@ -245,7 +265,7 @@ const App: React.FC = () => {
       </main>
 
       {!user.isDeliveryBoy && currentView !== 'assistant' && (
-        <button onClick={() => setCurrentView('assistant')} className={`fixed ${['admin', 'delivery', 'assistant'].includes(currentView) ? 'bottom-6' : 'bottom-24'} right-6 h-14 w-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center z-40`}>
+        <button onClick={() => setCurrentView('assistant')} className={`fixed ${['admin', 'delivery', 'assistant'].includes(currentView) ? 'bottom-6' : 'bottom-24'} right-6 h-14 w-14 bg-blue-600 dark:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center z-40 transition-transform active:scale-95`}>
           <i className="fas fa-robot text-xl"></i>
         </button>
       )}

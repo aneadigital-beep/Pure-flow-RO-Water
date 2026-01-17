@@ -100,38 +100,38 @@ const Admin: React.FC<AdminProps> = ({
     return (
       <div className="space-y-6 pb-6 animate-in slide-in-from-right-4">
         <div className="flex items-center gap-4">
-          <button onClick={() => setSelectedOrderId(null)} className="h-10 w-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-600">
+          <button onClick={() => setSelectedOrderId(null)} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-gray-600 dark:text-slate-300 transition-colors">
             <i className="fas fa-arrow-left"></i>
           </button>
-          <h2 className="text-xl font-bold text-gray-800">Order Details</h2>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100">Order Details</h2>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-slate-700 space-y-4">
           <div className="flex justify-between items-start">
             <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-              selectedOrder.status === 'Delivered' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'
+              selectedOrder.status === 'Delivered' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
             }`}>
               {selectedOrder.status}
             </span>
             <div className="text-right">
-              <p className="text-lg font-black text-blue-600">₹{selectedOrder.total}</p>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{selectedOrder.paymentMethod}</p>
+              <p className="text-lg font-black text-blue-600 dark:text-blue-400">₹{selectedOrder.total}</p>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase tracking-widest">{selectedOrder.paymentMethod}</p>
             </div>
           </div>
           
           <div className="space-y-1">
-            <p className="text-sm font-bold text-gray-800">{selectedOrder.userName}</p>
-            <p className="text-xs text-gray-500">{selectedOrder.userMobile}</p>
-            <p className="text-xs text-gray-400 leading-relaxed">{selectedOrder.userAddress}</p>
+            <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{selectedOrder.userName}</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400">{selectedOrder.userMobile}</p>
+            <p className="text-xs text-gray-400 dark:text-slate-500 leading-relaxed">{selectedOrder.userAddress}</p>
           </div>
 
-          <div className="pt-4 border-t border-gray-50">
-             <p className="text-[10px] text-gray-400 font-bold uppercase mb-2">Delivery Assignment</p>
+          <div className="pt-4 border-t border-gray-50 dark:border-slate-700">
+             <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase mb-2">Delivery Assignment</p>
              <div className="relative">
                 <select 
                   value={selectedOrder.assignedToMobile || ''}
                   onChange={(e) => onAssignOrder(selectedOrder.id, e.target.value || undefined)}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold appearance-none text-gray-700"
+                  className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold appearance-none text-gray-700 dark:text-slate-300"
                 >
                   <option value="">-- Click to Assign Staff --</option>
                   {deliveryBoys.map(db => (
@@ -145,23 +145,23 @@ const Admin: React.FC<AdminProps> = ({
           </div>
 
           {isAssigned && selectedOrder.status === 'Pending' && (
-            <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-2xl flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white shrink-0">
                 <i className="fas fa-truck-fast"></i>
               </div>
               <div>
-                <p className="text-xs font-bold text-blue-800">Out for Delivery</p>
-                <p className="text-[10px] text-blue-600">Assigned to: {selectedOrder.assignedToName}</p>
+                <p className="text-xs font-bold text-blue-800 dark:text-blue-200">Out for Delivery</p>
+                <p className="text-[10px] text-blue-600 dark:text-blue-400">Assigned to: {selectedOrder.assignedToName}</p>
               </div>
             </div>
           )}
 
           <div className="pt-2">
-            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Items</p>
+            <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase mb-1">Items</p>
             {selectedOrder.items.map((item, idx) => (
               <div key={idx} className="flex justify-between text-xs py-1">
-                <span>{item.quantity}x {item.product.name}</span>
-                <span className="font-bold">₹{item.product.price * item.quantity}</span>
+                <span className="dark:text-slate-400">{item.quantity}x {item.product.name}</span>
+                <span className="font-bold dark:text-slate-200">₹{item.product.price * item.quantity}</span>
               </div>
             ))}
           </div>
@@ -171,7 +171,7 @@ const Admin: React.FC<AdminProps> = ({
           <div className="grid grid-cols-1 gap-3">
              <button 
               onClick={() => { if(window.confirm("Cancel this order?")) { onUpdateStatus(selectedOrder.id, 'Cancelled'); setSelectedOrderId(null); } }} 
-              className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-2xl"
+              className="w-full bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 font-bold py-4 rounded-2xl border border-red-100 dark:border-red-900/20 transition-colors"
             >
               Cancel Order
             </button>
@@ -184,19 +184,19 @@ const Admin: React.FC<AdminProps> = ({
   return (
     <div className="space-y-6 pb-6 relative">
       <div className="flex items-center gap-4">
-        <button onClick={onBack} className="h-10 w-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-600">
+        <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-gray-600 dark:text-slate-300">
           <i className="fas fa-arrow-left"></i>
         </button>
-        <h2 className="text-xl font-bold text-gray-800">Business Hub</h2>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100">Business Hub</h2>
       </div>
 
-      <div className="flex p-1.5 bg-gray-100 rounded-2xl overflow-x-auto scrollbar-hide">
+      <div className="flex p-1.5 bg-gray-100 dark:bg-slate-950 rounded-2xl overflow-x-auto scrollbar-hide">
         {(['Orders', 'Inventory', 'Staff', 'Settings'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`flex-1 min-w-[90px] py-3 rounded-xl text-[10px] font-bold transition-all ${
-              activeTab === tab ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'
+              activeTab === tab ? 'bg-white dark:bg-slate-800 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-slate-500'
             }`}
           >
             {tab}
@@ -206,24 +206,24 @@ const Admin: React.FC<AdminProps> = ({
 
       {activeTab === 'Orders' && (
         <div className="space-y-4 animate-in fade-in">
-          <h3 className="font-bold text-gray-800">Order Logs</h3>
+          <h3 className="font-bold text-gray-800 dark:text-slate-200">Order Logs</h3>
           <div className="space-y-3">
             {orders.length === 0 ? (
-              <div className="text-center py-10 text-gray-400 text-sm italic">No orders logged.</div>
+              <div className="text-center py-10 text-gray-400 dark:text-slate-600 text-sm italic">No orders logged.</div>
             ) : (
               orders.map(o => (
-                <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center cursor-pointer shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-xs font-bold ${o.status === 'Delivered' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
+                <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-gray-100 dark:border-slate-700 flex justify-between items-center cursor-pointer shadow-sm">
+                  <div className="flex items-center gap-3 text-left">
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-xs font-bold ${o.status === 'Delivered' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'}`}>
                       {o.userName.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-bold text-sm">{o.userName}</p>
-                      <p className="text-[10px] text-gray-400">Assigned: <span className="text-blue-500 font-bold">{o.assignedToName || 'None'}</span></p>
+                      <p className="font-bold text-sm dark:text-slate-200">{o.userName}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500">Assigned: <span className="text-blue-500 dark:text-blue-400 font-bold">{o.assignedToName || 'None'}</span></p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-blue-600">₹{o.total}</p>
+                    <p className="text-sm font-bold text-blue-600 dark:text-blue-400">₹{o.total}</p>
                     <span className={`text-[8px] font-bold uppercase ${o.status === 'Delivered' ? 'text-green-500' : 'text-orange-500'}`}>{o.status}</span>
                   </div>
                 </div>
@@ -236,18 +236,18 @@ const Admin: React.FC<AdminProps> = ({
       {activeTab === 'Inventory' && (
         <div className="space-y-4 animate-in fade-in">
           <div className="flex justify-between items-center">
-             <h3 className="font-bold text-gray-800">Products</h3>
-             <button onClick={() => setIsAddingNew(true)} className="h-8 w-8 bg-blue-600 text-white rounded-lg flex items-center justify-center"><i className="fas fa-plus"></i></button>
+             <h3 className="font-bold text-gray-800 dark:text-slate-200">Products</h3>
+             <button onClick={() => setIsAddingNew(true)} className="h-8 w-8 bg-blue-600 dark:bg-blue-500 text-white rounded-lg flex items-center justify-center shadow-lg active:scale-95"><i className="fas fa-plus"></i></button>
           </div>
           <div className="grid grid-cols-1 gap-3">
             {products.map(p => (
-              <div key={p.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex items-center gap-4">
+              <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-gray-100 dark:border-slate-700 flex items-center gap-4">
                 <img src={p.image} className="h-12 w-12 rounded-xl object-cover" alt="" />
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-gray-800">{p.name}</p>
-                  <p className="text-[10px] text-blue-600 font-bold">₹{p.price} / {p.unit}</p>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-bold text-gray-800 dark:text-slate-200">{p.name}</p>
+                  <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">₹{p.price} / {p.unit}</p>
                 </div>
-                <button onClick={() => { setProdForm(p); setEditingProduct(p); }} className="h-8 w-8 text-gray-400 hover:text-blue-600"><i className="fas fa-pen"></i></button>
+                <button onClick={() => { setProdForm(p); setEditingProduct(p); }} className="h-8 w-8 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"><i className="fas fa-pen"></i></button>
               </div>
             ))}
           </div>
@@ -257,25 +257,25 @@ const Admin: React.FC<AdminProps> = ({
       {activeTab === 'Staff' && (
         <div className="space-y-4 animate-in fade-in">
           <div className="flex justify-between items-center">
-             <h3 className="font-bold text-gray-800">Delivery Team</h3>
-             <button onClick={() => setIsAddingStaff(true)} className="h-8 w-8 bg-green-600 text-white rounded-lg flex items-center justify-center shadow-lg shadow-green-100"><i className="fas fa-user-plus"></i></button>
+             <h3 className="font-bold text-gray-800 dark:text-slate-200">Delivery Team</h3>
+             <button onClick={() => setIsAddingStaff(true)} className="h-8 w-8 bg-green-600 dark:bg-green-500 text-white rounded-lg flex items-center justify-center shadow-lg active:scale-95"><i className="fas fa-user-plus"></i></button>
           </div>
           <div className="space-y-3">
             {deliveryBoys.length === 0 ? (
-              <div className="text-center py-10 text-gray-400 text-sm italic">No staff added yet.</div>
+              <div className="text-center py-10 text-gray-400 dark:text-slate-600 text-sm italic">No staff added yet.</div>
             ) : (
               deliveryBoys.map(db => (
-                <div key={db.mobile} className="bg-white p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
+                <div key={db.mobile} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-gray-100 dark:border-slate-700 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-green-50 text-green-600 flex items-center justify-center font-bold">{db.name.charAt(0)}</div>
-                    <div>
-                      <p className="text-sm font-bold">{db.name}</p>
-                      <p className="text-[10px] text-gray-400">{db.mobile}</p>
+                    <div className="h-10 w-10 rounded-full bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 flex items-center justify-center font-bold">{db.name.charAt(0)}</div>
+                    <div className="text-left">
+                      <p className="text-sm font-bold dark:text-slate-200">{db.name}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500">{db.mobile}</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <a href={`tel:${db.mobile}`} className="h-8 w-8 bg-gray-50 text-gray-400 rounded-lg flex items-center justify-center"><i className="fas fa-phone"></i></a>
-                    <button onClick={() => onUpdateStaffRole(db.mobile, false)} className="h-8 w-8 bg-red-50 text-red-500 rounded-lg flex items-center justify-center"><i className="fas fa-user-minus"></i></button>
+                    <a href={`tel:${db.mobile}`} className="h-8 w-8 bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-500 rounded-lg flex items-center justify-center transition-colors"><i className="fas fa-phone"></i></a>
+                    <button onClick={() => onUpdateStaffRole(db.mobile, false)} className="h-8 w-8 bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-lg flex items-center justify-center transition-colors"><i className="fas fa-user-minus"></i></button>
                   </div>
                 </div>
               ))
@@ -286,28 +286,28 @@ const Admin: React.FC<AdminProps> = ({
 
       {activeTab === 'Settings' && (
         <div className="space-y-4 animate-in fade-in">
-          <h3 className="font-bold text-gray-800">Business Controls</h3>
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 space-y-4">
-             <div>
-               <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Delivery Fee (₹)</label>
-               <input type="number" value={deliveryFee} onChange={(e) => onUpdateDeliveryFee(parseInt(e.target.value) || 0)} className="w-full bg-gray-50 p-4 rounded-xl text-sm font-bold" />
+          <h3 className="font-bold text-gray-800 dark:text-slate-200">Business Controls</h3>
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-gray-100 dark:border-slate-700 space-y-4 transition-colors">
+             <div className="text-left">
+               <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase ml-1">Delivery Fee (₹)</label>
+               <input type="number" value={deliveryFee} onChange={(e) => onUpdateDeliveryFee(parseInt(e.target.value) || 0)} className="w-full bg-gray-50 dark:bg-slate-900 p-4 rounded-xl text-sm font-bold dark:text-slate-200 dark:border dark:border-slate-700" />
              </div>
              
-             <div className="space-y-3 pt-4 border-t border-gray-50">
-               <div className="bg-blue-50 p-4 rounded-2xl mb-2">
-                 <p className="text-[10px] text-blue-700 font-bold uppercase mb-1">How to send tasks to staff:</p>
-                 <p className="text-[10px] text-blue-600 leading-relaxed">
+             <div className="space-y-3 pt-4 border-t border-gray-50 dark:border-slate-700">
+               <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-2xl mb-2 text-left">
+                 <p className="text-[10px] text-blue-700 dark:text-blue-300 font-bold uppercase mb-1">How to send tasks to staff:</p>
+                 <p className="text-[10px] text-blue-600 dark:text-blue-400 leading-relaxed">
                    1. Assign tasks to staff in the "Orders" tab.<br/>
                    2. Click "Export Tasks Update" below.<br/>
                    3. Send the file to your staff via WhatsApp.<br/>
                    4. They should click "Sync Tasks" on their dashboard.
                  </p>
                </div>
-               <button onClick={handleExportData} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 active:scale-95 transition-transform">
+               <button onClick={handleExportData} className="w-full bg-blue-600 dark:bg-blue-500 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 dark:shadow-none active:scale-95 transition-transform">
                  <i className="fas fa-file-export"></i>
                  Export Tasks Update (JSON)
                </button>
-               <button onClick={() => importFileRef.current?.click()} className="w-full bg-gray-100 text-gray-700 py-4 rounded-2xl font-bold border border-gray-200 active:scale-95 transition-transform">
+               <button onClick={() => importFileRef.current?.click()} className="w-full bg-gray-100 dark:bg-slate-900 text-gray-700 dark:text-slate-300 py-4 rounded-2xl font-bold border border-gray-200 dark:border-slate-700 active:scale-95 transition-transform">
                  <i className="fas fa-file-import"></i>
                  Import Data
                </button>
@@ -332,34 +332,34 @@ const Admin: React.FC<AdminProps> = ({
 
       {/* Overlays for Add Product / Add Staff */}
       {(isAddingNew || editingProduct) && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end animate-in fade-in">
-           <form onSubmit={handleSaveProduct} className="bg-white w-full rounded-t-[2.5rem] p-8 space-y-4 max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-20">
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-[100] flex items-end animate-in fade-in">
+           <form onSubmit={handleSaveProduct} className="bg-white dark:bg-slate-900 w-full rounded-t-[2.5rem] p-8 space-y-4 max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-20 transition-colors">
               <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold">{editingProduct ? 'Edit Product' : 'New Product'}</h3>
-                <button type="button" onClick={() => { setIsAddingNew(false); setEditingProduct(null); }} className="text-gray-400"><i className="fas fa-times"></i></button>
+                <h3 className="text-xl font-bold dark:text-slate-100">{editingProduct ? 'Edit Product' : 'New Product'}</h3>
+                <button type="button" onClick={() => { setIsAddingNew(false); setEditingProduct(null); }} className="text-gray-400 dark:text-slate-500"><i className="fas fa-times"></i></button>
               </div>
-              <input type="text" placeholder="Name" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-gray-50 p-4 rounded-xl text-sm" required />
-              <textarea placeholder="Description" value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} className="w-full bg-gray-50 p-4 rounded-xl text-sm h-20" required />
+              <input type="text" placeholder="Name" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-gray-50 dark:bg-slate-950 p-4 rounded-xl text-sm dark:text-slate-200 dark:border dark:border-slate-800" required />
+              <textarea placeholder="Description" value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} className="w-full bg-gray-50 dark:bg-slate-950 p-4 rounded-xl text-sm h-20 dark:text-slate-200 dark:border dark:border-slate-800" required />
               <div className="grid grid-cols-2 gap-3">
-                <input type="number" placeholder="Price (₹)" value={prodForm.price || ''} onChange={e => setProdForm({...prodForm, price: parseInt(e.target.value)})} className="w-full bg-gray-50 p-4 rounded-xl text-sm" required />
-                <input type="text" placeholder="Unit (Can/Month)" value={prodForm.unit} onChange={e => setProdForm({...prodForm, unit: e.target.value})} className="w-full bg-gray-50 p-4 rounded-xl text-sm" required />
+                <input type="number" placeholder="Price (₹)" value={prodForm.price || ''} onChange={e => setProdForm({...prodForm, price: parseInt(e.target.value)})} className="w-full bg-gray-50 dark:bg-slate-950 p-4 rounded-xl text-sm dark:text-slate-200 dark:border dark:border-slate-800" required />
+                <input type="text" placeholder="Unit (Can/Month)" value={prodForm.unit} onChange={e => setProdForm({...prodForm, unit: e.target.value})} className="w-full bg-gray-50 dark:bg-slate-950 p-4 rounded-xl text-sm dark:text-slate-200 dark:border dark:border-slate-800" required />
               </div>
-              <input type="text" placeholder="Image URL" value={prodForm.image} onChange={e => setProdForm({...prodForm, image: e.target.value})} className="w-full bg-gray-50 p-4 rounded-xl text-sm" required />
-              <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg">Save Product</button>
+              <input type="text" placeholder="Image URL" value={prodForm.image} onChange={e => setProdForm({...prodForm, image: e.target.value})} className="w-full bg-gray-50 dark:bg-slate-950 p-4 rounded-xl text-sm dark:text-slate-200 dark:border dark:border-slate-800" required />
+              <button type="submit" className="w-full bg-blue-600 dark:bg-blue-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-100 dark:shadow-none transition-transform active:scale-95">Save Product</button>
            </form>
         </div>
       )}
 
       {isAddingStaff && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end animate-in fade-in">
-           <form onSubmit={handleAddStaffSubmit} className="bg-white w-full rounded-t-[2.5rem] p-8 space-y-4 animate-in slide-in-from-bottom-20">
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-[100] flex items-end animate-in fade-in">
+           <form onSubmit={handleAddStaffSubmit} className="bg-white dark:bg-slate-900 w-full rounded-t-[2.5rem] p-8 space-y-4 animate-in slide-in-from-bottom-20 transition-colors">
               <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold">Add Delivery Boy</h3>
-                <button type="button" onClick={() => setIsAddingStaff(false)} className="text-gray-400"><i className="fas fa-times"></i></button>
+                <h3 className="text-xl font-bold dark:text-slate-100">Add Delivery Boy</h3>
+                <button type="button" onClick={() => setIsAddingStaff(false)} className="text-gray-400 dark:text-slate-500"><i className="fas fa-times"></i></button>
               </div>
-              <input type="text" placeholder="Name" value={staffForm.name} onChange={e => setStaffForm({...staffForm, name: e.target.value})} className="w-full bg-gray-50 p-4 rounded-xl text-sm" required />
-              <input type="tel" placeholder="Mobile Number (10 digits)" value={staffForm.mobile} onChange={e => setStaffForm({...staffForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})} className="w-full bg-gray-50 p-4 rounded-xl text-sm" required />
-              <button type="submit" className="w-full bg-green-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-100">Register Staff</button>
+              <input type="text" placeholder="Name" value={staffForm.name} onChange={e => setStaffForm({...staffForm, name: e.target.value})} className="w-full bg-gray-50 dark:bg-slate-950 p-4 rounded-xl text-sm dark:text-slate-200 dark:border dark:border-slate-800" required />
+              <input type="tel" placeholder="Mobile Number (10 digits)" value={staffForm.mobile} onChange={e => setStaffForm({...staffForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})} className="w-full bg-gray-50 dark:bg-slate-950 p-4 rounded-xl text-sm dark:text-slate-200 dark:border dark:border-slate-800" required />
+              <button type="submit" className="w-full bg-green-600 dark:bg-green-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-100 dark:shadow-none transition-transform active:scale-95">Register Staff</button>
            </form>
         </div>
       )}

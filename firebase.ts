@@ -1,42 +1,9 @@
 
-import firebase from "firebase/app";
-import "firebase/firestore";
-
 /**
- * --- TROUBLESHOOTING DATA ISSUES ---
- * 1. Ensure 'projectId' below matches the ID in your Firebase Browser URL.
- * 2. Ensure 'appId' is exactly what is in your Firebase Project Settings.
- * 3. Ensure you clicked 'PUBLISH' in the Firebase Rules tab.
+ * Local Persistence Engine (Firebase Replacement)
+ * This module replaces Firebase with LocalStorage while maintaining the same API interface.
  */
-const firebaseConfig = {
-  // Always use the injected API key for the SDK
-  apiKey: process.env.API_KEY, 
-  
-  // PASTE YOUR ACTUAL VALUES BELOW FROM FIREBASE CONSOLE:
-  authDomain: "purerowater-9d71e.firebaseapp.com",
-  projectId: "purerowater-9d71e",
-  storageBucket: "purerowater-9d71e.appspot.com",
-  messagingSenderId: "41728470122",
-  appId: "1:41728470122:web:9e08d23d25f20e86a46e13"
-};
 
-// Initialize Firebase using v8 namespaced syntax
-let db: firebase.firestore.Firestore;
-
-try {
-  // Check if an app is already initialized to prevent errors on hot-reloading
-  if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-  }
-  db = firebase.firestore();
-  console.log("Firebase initialized successfully with Project ID:", firebaseConfig.projectId);
-} catch (error) {
-  console.error("Firebase initialization failed:", error);
-}
-
-export { db };
-
-// Collection Names
 export const COLLECTIONS = {
   ORDERS: 'orders',
   USERS: 'users',
@@ -44,61 +11,117 @@ export const COLLECTIONS = {
   SETTINGS: 'settings'
 };
 
+// Mock "db" for compatibility with existing imports
+export const db = { local: true };
+
+// Helper to get local data
+const getLocalData = (collectionName: string): any[] => {
+  const data = localStorage.getItem(`pf_${collectionName}`);
+  return data ? JSON.parse(data) : [];
+};
+
+// Helper to set local data and notify listeners
+const setLocalData = (collectionName: string, data: any[]) => {
+  localStorage.setItem(`pf_${collectionName}`, JSON.stringify(data));
+  window.dispatchEvent(new CustomEvent(`pf_update_${collectionName}`, { detail: data }));
+};
+
 /**
- * Helper to simulate v9 modular orderBy in a v8 namespaced context.
- * Returns a constraint object that syncCollection understands.
+ * Mocks the Firebase query ordering functionality.
  */
-export const orderBy = (field: string, direction: 'asc' | 'desc' = 'asc') => ({
-  type: 'orderBy',
-  field,
-  direction
-});
-
-// Real-time listener with error handling (v8 implementation)
-export const syncCollection = (collectionName: string, callback: (data: any[]) => void, queryConstraints: any[] = []) => {
-  if (!db) return () => {};
-  
-  let ref: firebase.firestore.Query = db.collection(collectionName);
-  
-  // Apply order constraints from the provided array
-  queryConstraints.forEach(constraint => {
-    if (constraint.type === 'orderBy') {
-      ref = ref.orderBy(constraint.field, constraint.direction);
-    }
-  });
-
-  return ref.onSnapshot(
-    (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-      callback(data);
-    },
-    (error) => {
-      console.error(`Error syncing ${collectionName}:`, error.message);
-      if (error.code === 'permission-denied') {
-        console.error("Check your Firebase Rules! They might be blocking the app.");
-      }
-    }
-  );
+export const orderBy = (field: string, direction: 'asc' | 'desc' = 'asc') => {
+  return { type: 'order', field, direction };
 };
 
-// V8 implementation of upsertDocument
+/**
+ * Mocks the onSnapshot functionality using LocalStorage and CustomEvents.
+ */
+export const syncCollection = (
+  collectionName: string, 
+  callback: (data: any[]) => void, 
+  constraints: any[] = []
+) => {
+  // Initial load
+  const loadAndEmit = () => {
+    let data = getLocalData(collectionName);
+    
+    // Simple mock ordering logic
+    const orderConstraint = constraints.find(c => c && c.type === 'order');
+    if (orderConstraint) {
+      data.sort((a, b) => {
+        const valA = a[orderConstraint.field];
+        const valB = b[orderConstraint.field];
+        if (orderConstraint.direction === 'asc') return valA > valB ? 1 : -1;
+        return valA < valB ? 1 : -1;
+      });
+    }
+    
+    callback(data);
+  };
+
+  loadAndEmit();
+
+  // Listen for updates in the current tab
+  const handleUpdate = (e: any) => callback(e.detail);
+  window.addEventListener(`pf_update_${collectionName}`, handleUpdate);
+
+  // Listen for updates from other tabs
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key === `pf_${collectionName}`) {
+      loadAndEmit();
+    }
+  };
+  window.addEventListener('storage', handleStorage);
+
+  return () => {
+    window.removeEventListener(`pf_update_${collectionName}`, handleUpdate);
+    window.removeEventListener('storage', handleStorage);
+  };
+};
+
+/**
+ * Adds or merges a document in a collection.
+ */
 export const upsertDocument = async (collectionName: string, id: string, data: any) => {
-  if (!db) return;
-  const docRef = db.collection(collectionName).doc(id);
-  await docRef.set({ ...data, lastUpdated: new Date().toISOString() }, { merge: true });
+  const existing = getLocalData(collectionName);
+  const index = existing.findIndex(doc => String(doc.id) === String(id));
+  
+  const updatedDoc = { 
+    ...data, 
+    id, 
+    lastUpdated: new Date().toISOString() 
+  };
+
+  if (index >= 0) {
+    existing[index] = { ...existing[index], ...updatedDoc };
+  } else {
+    existing.push(updatedDoc);
+  }
+
+  setLocalData(collectionName, existing);
 };
 
-// V8 implementation of updateDocument
+/**
+ * Updates an existing document.
+ */
 export const updateDocument = async (collectionName: string, id: string, data: any) => {
-  if (!db) return;
-  const docRef = db.collection(collectionName).doc(id);
-  await docRef.update({ ...data, lastUpdated: new Date().toISOString() });
+  const existing = getLocalData(collectionName);
+  const index = existing.findIndex(doc => String(doc.id) === String(id));
+  
+  if (index >= 0) {
+    existing[index] = { 
+      ...existing[index], 
+      ...data, 
+      lastUpdated: new Date().toISOString() 
+    };
+    setLocalData(collectionName, existing);
+  }
 };
 
-// V8 implementation of getDocument
+/**
+ * Fetches a single document by ID.
+ */
 export const getDocument = async (collectionName: string, id: string) => {
-  if (!db) return null;
-  const docRef = db.collection(collectionName).doc(id);
-  const snap = await docRef.get();
-  return snap.exists ? snap.data() : null;
+  const existing = getLocalData(collectionName);
+  return existing.find(doc => String(doc.id) === String(id)) || null;
 };
