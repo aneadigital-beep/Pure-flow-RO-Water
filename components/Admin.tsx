@@ -1,7 +1,6 @@
 
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Order, Product, User, AppNotification } from '../types';
-import { getFullDatabaseExport, importDatabasePackage } from '../firebase';
 
 interface AdminProps {
   orders: Order[];
@@ -14,7 +13,9 @@ interface AdminProps {
   onDeleteProduct: (id: string) => void;
   onBack: () => void;
   deliveryFee: number;
+  upiId: string;
   onUpdateDeliveryFee: (fee: number) => void;
+  onUpdateUpiId: (id: string) => void;
   onImportData: (data: any) => void;
   onAssignOrder: (orderId: string, staffMobile: string | undefined) => void;
   onAddStaff: (mobile: string, name: string) => void;
@@ -35,23 +36,22 @@ const Admin: React.FC<AdminProps> = ({
   onDeleteProduct,
   onBack,
   deliveryFee,
+  upiId,
   onUpdateDeliveryFee,
-  onImportData,
+  onUpdateUpiId,
   onAssignOrder,
   onAddStaff,
   onUpdateStaffRole,
-  onUpdateAdminRole,
-  townId,
-  onSetTownId
+  onUpdateAdminRole
 }) => {
-  const [activeTab, setActiveTab] = useState<'Dashboard' | 'Orders' | 'Inventory' | 'Users' | 'Cloud'>('Dashboard');
+  const [activeTab, setActiveTab] = useState<'Dashboard' | 'Orders' | 'Inventory' | 'Users'>('Dashboard');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [isAddingStaff, setIsAddingStaff] = useState(false);
   const [userSearch, setUserSearch] = useState('');
-  const [showRawData, setShowRawData] = useState(false);
-  const [syncPackageInput, setSyncPackageInput] = useState('');
+
+  const [settingsForm, setSettingsForm] = useState({ fee: deliveryFee, upi: upiId });
 
   const [prodForm, setProdForm] = useState<Partial<Product>>({
     name: '', description: '', price: 0, unit: 'Can', image: '', category: 'can'
@@ -64,6 +64,10 @@ const Admin: React.FC<AdminProps> = ({
     else setProdForm({ name: '', description: '', price: 0, unit: 'Can', image: '', category: 'can' });
   }, [editingProduct, isAddingNew]);
 
+  useEffect(() => {
+    setSettingsForm({ fee: deliveryFee, upi: upiId });
+  }, [deliveryFee, upiId]);
+
   const stats = useMemo(() => {
     const totalRevenue = orders.reduce((acc, o) => o.status === 'Delivered' ? acc + o.total : acc, 0);
     const pendingOrders = orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').length;
@@ -73,7 +77,7 @@ const Admin: React.FC<AdminProps> = ({
   }, [orders]);
 
   const deliveryBoys = useMemo(() => registeredUsers.filter(u => u.isDeliveryBoy), [registeredUsers]);
-  const filteredUsers = registeredUsers.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.mobile.includes(userSearch));
+  const filteredUsers = registeredUsers.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.mobile?.includes(userSearch));
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
 
   const handleSaveProduct = (e: React.FormEvent) => {
@@ -87,6 +91,12 @@ const Admin: React.FC<AdminProps> = ({
     }
   };
 
+  const handleSaveSettings = () => {
+    onUpdateDeliveryFee(Number(settingsForm.fee));
+    onUpdateUpiId(settingsForm.upi);
+    alert("Business settings updated successfully!");
+  };
+
   const handleAddStaffSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (staffForm.mobile.length === 10 && staffForm.name) {
@@ -96,22 +106,60 @@ const Admin: React.FC<AdminProps> = ({
     } else alert("Please enter a valid 10-digit mobile number and name.");
   };
 
-  const handleExportData = () => {
-    const data = getFullDatabaseExport();
-    navigator.clipboard.writeText(data);
-    alert("Sync Package copied to clipboard! Share this code with other devices to sync.");
-  };
+  /**
+   * Generates and downloads a CSV file
+   */
+  const exportToExcel = (type: 'orders' | 'users') => {
+    let csvRows = [];
+    let filename = "";
 
-  const handleImportData = () => {
-    if (importDatabasePackage(syncPackageInput)) {
-      alert("Database synced successfully! Restarting...");
-      window.location.reload();
-    } else alert("Invalid Sync Package. Please try again.");
-  };
+    if (type === 'orders') {
+      filename = `PureFlow_Orders_${new Date().toLocaleDateString()}.csv`;
+      csvRows.push(['Order ID', 'Date', 'Customer Name', 'Mobile', 'Address', 'Items', 'Total Amount', 'Payment Method', 'Status', 'Assigned To'].join(','));
+      
+      orders.forEach(o => {
+        const row = [
+          o.id,
+          o.date,
+          `"${o.userName}"`,
+          o.userMobile,
+          `"${o.userAddress.replace(/"/g, '""')}"`,
+          `"${o.productSummary}"`,
+          o.total,
+          o.paymentMethod,
+          o.status,
+          o.assignedToName || 'Unassigned'
+        ];
+        csvRows.push(row.join(','));
+      });
+    } else {
+      filename = `PureFlow_Customers_${new Date().toLocaleDateString()}.csv`;
+      csvRows.push(['Name', 'Mobile', 'Email', 'Pincode', 'Role', 'Address'].join(','));
+      
+      registeredUsers.forEach(u => {
+        const role = u.isAdmin ? 'Admin' : u.isDeliveryBoy ? 'Staff' : 'Customer';
+        const row = [
+          `"${u.name}"`,
+          u.mobile || 'N/A',
+          u.email || 'N/A',
+          u.pincode,
+          role,
+          `"${u.address.replace(/"/g, '""')}"`
+        ];
+        csvRows.push(row.join(','));
+      });
+    }
 
-  const generateTownId = () => {
-    const newId = `TOWN-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-    onSetTownId(newId);
+    const csvString = '\uFEFF' + csvRows.join('\n'); // Add BOM for Excel UTF-8 support
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (selectedOrder) {
@@ -185,7 +233,7 @@ const Admin: React.FC<AdminProps> = ({
       </div>
 
       <div className="flex p-1.5 bg-gray-100 dark:bg-slate-950 rounded-2xl overflow-x-auto scrollbar-hide">
-        {(['Dashboard', 'Orders', 'Inventory', 'Users', 'Cloud'] as const).map(tab => (
+        {(['Dashboard', 'Orders', 'Inventory', 'Users'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -215,12 +263,93 @@ const Admin: React.FC<AdminProps> = ({
           
           <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-gray-100 dark:border-slate-700 text-left">
             <h3 className="font-bold text-gray-800 dark:text-white mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-8">
               <button onClick={() => setIsAddingNew(true)} className="flex items-center justify-center gap-2 p-4 bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 rounded-2xl font-bold text-xs active:scale-95 transition-all">
                 <i className="fas fa-plus-circle"></i> New Product
               </button>
               <button onClick={() => setIsAddingStaff(true)} className="flex items-center justify-center gap-2 p-4 bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-400 rounded-2xl font-bold text-xs active:scale-95 transition-all">
                 <i className="fas fa-user-plus"></i> Add Staff
+              </button>
+            </div>
+
+            <div className="space-y-6 pt-2 border-t border-gray-100 dark:border-slate-700">
+               <div className="flex items-center gap-2 mb-4 mt-4">
+                  <div className="h-8 w-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600">
+                     <i className="fas fa-gear text-sm"></i>
+                  </div>
+                  <h4 className="font-bold text-gray-800 dark:text-white text-sm">Business Settings</h4>
+               </div>
+               
+               <div className="space-y-4">
+                 <div className="space-y-1.5">
+                   <label className="text-[10px] font-black uppercase text-gray-400 dark:text-slate-500 ml-1">UPI ID for QR Code</label>
+                   <div className="relative">
+                      <input 
+                        type="text" 
+                        value={settingsForm.upi}
+                        onChange={(e) => setSettingsForm(prev => ({ ...prev, upi: e.target.value }))}
+                        placeholder="yourname@upi"
+                        className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl py-4 pl-12 pr-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                      <i className="fas fa-qrcode absolute left-4 top-1/2 -translate-y-1/2 text-gray-300"></i>
+                   </div>
+                   <p className="text-[9px] text-gray-400 italic ml-1">Customers will see this ID in the payment QR code.</p>
+                 </div>
+
+                 <div className="space-y-1.5">
+                   <label className="text-[10px] font-black uppercase text-gray-400 dark:text-slate-500 ml-1">Delivery Fee (₹)</label>
+                   <div className="relative">
+                      <input 
+                        type="number" 
+                        value={settingsForm.fee}
+                        onChange={(e) => setSettingsForm(prev => ({ ...prev, fee: parseInt(e.target.value) || 0 }))}
+                        className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl py-4 pl-12 pr-4 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                      <i className="fas fa-truck absolute left-4 top-1/2 -translate-y-1/2 text-gray-300"></i>
+                   </div>
+                 </div>
+
+                 <button 
+                  onClick={handleSaveSettings}
+                  className="w-full py-4 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-100 dark:shadow-none active:scale-95 transition-all"
+                 >
+                   Save Business Settings
+                 </button>
+               </div>
+            </div>
+
+            <h4 className="font-bold text-gray-400 text-[10px] uppercase tracking-widest mb-3 mt-10">Backup & Data Management</h4>
+            <div className="space-y-3">
+              <button 
+                onClick={() => exportToExcel('orders')}
+                className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-blue-300 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600">
+                    <i className="fas fa-file-csv text-lg"></i>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-gray-800 dark:text-white">Export Orders to Excel</p>
+                    <p className="text-[9px] text-gray-400">Download complete sales history</p>
+                  </div>
+                </div>
+                <i className="fas fa-download text-gray-300 group-hover:text-blue-500 transition-colors"></i>
+              </button>
+
+              <button 
+                onClick={() => exportToExcel('users')}
+                className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-green-300 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center text-green-600">
+                    <i className="fas fa-users-gear text-lg"></i>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-gray-800 dark:text-white">Export Customer List</p>
+                    <p className="text-[9px] text-gray-400">Backup user contact information</p>
+                  </div>
+                </div>
+                <i className="fas fa-download text-gray-300 group-hover:text-green-500 transition-colors"></i>
               </button>
             </div>
           </div>
@@ -232,7 +361,7 @@ const Admin: React.FC<AdminProps> = ({
           {orders.length === 0 ? (
             <div className="py-20 text-center text-gray-400">
               <i className="fas fa-inbox text-4xl mb-4 opacity-20"></i>
-              <p className="text-sm italic">No orders in database. Share your sync code!</p>
+              <p className="text-sm italic">No orders in database yet.</p>
             </div>
           ) : (
             orders.map(o => (
@@ -299,7 +428,7 @@ const Admin: React.FC<AdminProps> = ({
           </div>
           <div className="space-y-3">
             {filteredUsers.map(u => (
-              <div key={u.mobile} className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-gray-100 dark:border-slate-700 text-left space-y-4 shadow-sm">
+              <div key={u.mobile || u.email} className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-gray-100 dark:border-slate-700 text-left space-y-4 shadow-sm">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-slate-900 flex items-center justify-center font-bold text-blue-600 overflow-hidden">
@@ -307,7 +436,7 @@ const Admin: React.FC<AdminProps> = ({
                     </div>
                     <div>
                       <p className="text-sm font-bold dark:text-white">{u.name}</p>
-                      <p className="text-[10px] text-gray-400">{u.mobile}</p>
+                      <p className="text-[10px] text-gray-400">{u.mobile || u.email}</p>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -318,7 +447,7 @@ const Admin: React.FC<AdminProps> = ({
                 
                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-50 dark:border-slate-700/50">
                   <button 
-                    onClick={() => onUpdateStaffRole(u.mobile, !u.isDeliveryBoy)}
+                    onClick={() => onUpdateStaffRole(u.mobile || u.email || '', !u.isDeliveryBoy)}
                     className={`py-2 px-3 rounded-xl text-[9px] font-bold uppercase transition-all ${
                       u.isDeliveryBoy ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'
                     }`}
@@ -326,7 +455,7 @@ const Admin: React.FC<AdminProps> = ({
                     {u.isDeliveryBoy ? 'Revoke Staff' : 'Make Staff'}
                   </button>
                   <button 
-                    onClick={() => onUpdateAdminRole(u.mobile, !u.isAdmin)}
+                    onClick={() => onUpdateAdminRole(u.mobile || u.email || '', !u.isAdmin)}
                     className={`py-2 px-3 rounded-xl text-[9px] font-bold uppercase transition-all ${
                       u.isAdmin ? 'bg-orange-50 text-orange-500 border border-orange-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
                     }`}
@@ -336,82 +465,6 @@ const Admin: React.FC<AdminProps> = ({
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'Cloud' && (
-        <div className="space-y-6 animate-in fade-in text-left">
-          <div className="bg-gradient-to-br from-indigo-700 to-blue-900 rounded-[2rem] p-8 text-white shadow-2xl overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
-            <div className="relative z-10 space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
-                  <i className="fas fa-cloud-arrow-up text-2xl"></i>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold">Cloud Sync Hub</h3>
-                  <p className="text-[10px] opacity-70 font-medium">Sync devices via Sync Package</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <button 
-                  onClick={handleExportData}
-                  className="w-full bg-white text-indigo-900 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center gap-2"
-                >
-                  <i className="fas fa-copy"></i> Export Sync Package
-                </button>
-                <p className="text-[10px] opacity-70 text-center">Click to copy everything to clipboard, then send it to the other device.</p>
-              </div>
-
-              <div className="pt-4 border-t border-white/10 space-y-3">
-                <label className="text-[10px] font-black uppercase opacity-60 ml-1">Import from other device</label>
-                <textarea 
-                  value={syncPackageInput}
-                  onChange={(e) => setSyncPackageInput(e.target.value)}
-                  placeholder="Paste Sync Package string here..."
-                  className="w-full bg-white/10 border border-white/10 rounded-xl p-3 text-[10px] h-20 placeholder:text-white/30 text-white focus:outline-none"
-                />
-                <button 
-                  onClick={handleImportData}
-                  disabled={!syncPackageInput}
-                  className="w-full bg-indigo-500/50 text-white py-3 rounded-xl font-bold text-[10px] border border-white/10 disabled:opacity-30"
-                >
-                  Apply Sync Package
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-gray-100 dark:border-slate-700 shadow-sm space-y-4">
-            <div className="flex justify-between items-center">
-              <h4 className="font-black text-xs uppercase text-gray-400">Database Inspector</h4>
-              <button onClick={() => setShowRawData(!showRawData)} className="text-blue-600 text-[10px] font-bold">
-                {showRawData ? 'Hide Data' : 'View Raw Database'}
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-gray-50 dark:bg-slate-900 p-3 rounded-xl text-center">
-                <p className="text-lg font-black dark:text-white">{orders.length}</p>
-                <p className="text-[8px] font-bold text-gray-400 uppercase">Orders</p>
-              </div>
-              <div className="bg-gray-50 dark:bg-slate-900 p-3 rounded-xl text-center">
-                <p className="text-lg font-black dark:text-white">{registeredUsers.length}</p>
-                <p className="text-[8px] font-bold text-gray-400 uppercase">Users</p>
-              </div>
-              <div className="bg-gray-50 dark:bg-slate-900 p-3 rounded-xl text-center">
-                <p className="text-lg font-black dark:text-white">{products.length}</p>
-                <p className="text-[8px] font-bold text-gray-400 uppercase">Catalog</p>
-              </div>
-            </div>
-
-            {showRawData && (
-              <pre className="bg-gray-900 text-green-400 p-4 rounded-xl text-[8px] overflow-auto max-h-60 scrollbar-hide font-mono leading-relaxed">
-                {getFullDatabaseExport()}
-              </pre>
-            )}
           </div>
         </div>
       )}

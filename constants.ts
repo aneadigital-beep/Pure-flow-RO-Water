@@ -51,5 +51,6 @@ export const PRODUCTS: Product[] = [
 
 export const TOWN_NAME = "Township RO";
 export const DELIVERY_FEE = 10;
+export const CAN_DEPOSIT_FEE = 150;
 export const DEFAULT_UPI_ID = "townshipro@upi";
 export const BUSINESS_PHONE = "9999999999";

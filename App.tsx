@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
-import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
+import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE, DEFAULT_UPI_ID } from './constants';
 import { COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy, getTownId, setTownId } from './firebase';
 import { supabase, syncOrderToSupabase, fetchOrdersFromSupabase, syncUserToSupabase, fetchUsersFromSupabase, subscribeToTable } from './supabase';
 import Navbar from './components/Navbar';
@@ -36,6 +37,7 @@ const App: React.FC = () => {
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [deliveryFee, setDeliveryFee] = useState<number>(DEFAULT_DELIVERY_FEE);
+  const [upiId, setUpiId] = useState<string>(DEFAULT_UPI_ID);
   const [currentView, setCurrentView] = useState<View>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeToast, setActiveToast] = useState<{title: string, message: string} | null>(null);
@@ -93,16 +95,16 @@ const App: React.FC = () => {
     const unsubSettings = syncCollection(COLLECTIONS.SETTINGS, (data) => {
       const feeSetting = data.find(d => d.id === 'deliveryFee');
       if (feeSetting) setDeliveryFee(feeSetting.value);
+      
+      const upiSetting = data.find(d => d.id === 'upiId');
+      if (upiSetting) setUpiId(upiSetting.value);
     });
 
     // 2. Subscribe to Supabase Realtime (Cloud Sync)
     const orderSubscription = subscribeToTable('orders', (payload) => {
       if (payload.new) {
-        // When any device updates an order, update our local store
-        // which will trigger unsubOrders -> setAllOrders -> Admin UI update
         upsertDocument(COLLECTIONS.ORDERS, payload.new.id, payload.new);
         
-        // Notify user if it's their order or if they are admin
         if (user && payload.eventType === 'UPDATE') {
            const isMyOrder = String(payload.new.userMobile) === String(user.mobile || user.email);
            if (isMyOrder && payload.new.status !== payload.old?.status) {
@@ -192,7 +194,7 @@ const App: React.FC = () => {
     setCart([]);
   };
 
-  const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online') => {
+  const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online', extras: { deposit: number }) => {
     if (!user || cart.length === 0) return;
     const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
     const productSummary = cart.map(item => `${item.quantity}x ${item.product.name}`).join(', ');
@@ -209,11 +211,12 @@ const App: React.FC = () => {
       productSummary: productSummary,
       date: now.toLocaleDateString(),
       createdAt: now.toISOString(),
-      total: subtotal + deliveryFee,
+      total: subtotal + deliveryFee + extras.deposit,
       items: [...cart],
       status: 'Pending',
       paymentMethod,
-      history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${timestamp}`, note: 'Order placed' }]
+      history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${timestamp}`, note: 'Order placed' }],
+      depositAmount: extras.deposit
     };
 
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
@@ -228,7 +231,6 @@ const App: React.FC = () => {
     const now = new Date();
     const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    // Always fetch freshest data from state to prevent history loss
     const orderToUpdate = allOrders.find(o => o.id === orderId);
     if (!orderToUpdate) return;
 
@@ -244,9 +246,7 @@ const App: React.FC = () => {
       history: [...orderToUpdate.history, historyEntry]
     };
 
-    // Update locally first for instant UI feel
     await upsertDocument(COLLECTIONS.ORDERS, orderId, updatedOrder);
-    // Push to cloud - this triggers the Realtime listener on other devices
     await syncOrderToSupabase(updatedOrder);
 
     addNotification(`Order ${status}!`, `Order ${orderId} is now ${status.toLowerCase()}.`, 'system', false, orderToUpdate.userMobile);
@@ -336,9 +336,9 @@ const App: React.FC = () => {
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 pt-6">
         {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
-        {currentView === 'cart' && <Cart items={cart} onUpdate={(id, delta) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + delta)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
+        {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, delta) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + delta)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
         {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
-        {currentView === 'orders' && <Orders orders={userOrders} />}
+        {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} />}
         {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
         {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile || user.email))} onUpdateStatus={updateOrderStatus} user={user} isLive={true} />}
         {currentView === 'admin' && (
@@ -349,7 +349,9 @@ const App: React.FC = () => {
             onDeleteProduct={handleDeleteProduct}
             orders={allOrders} onUpdateStatus={updateOrderStatus} onBack={() => setCurrentView('profile')}
             deliveryFee={deliveryFee} 
+            upiId={upiId}
             onUpdateDeliveryFee={(fee) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: fee })} 
+            onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })}
             registeredUsers={registeredUsers} notifications={notifications} onImportData={(d) => {}}
             onAssignOrder={assignOrder} 
             onAddStaff={(id, name) => upsertDocument(COLLECTIONS.USERS, id, { id, mobile: id, name, isDeliveryBoy: true, address: 'Staff' })} 

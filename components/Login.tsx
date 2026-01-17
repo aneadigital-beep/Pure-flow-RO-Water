@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User } from '../types';
 
@@ -20,6 +21,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
   
   const [existingUser, setExistingUser] = useState<User | null>(null);
 
+  const ADMIN_ID = '9999999999';
+
   const handleEntrySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!entryValue) return;
@@ -39,7 +42,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
         setExistingUser(user);
         setStep(4); // Found user! Go to PIN step
       } else {
-        setStep(3); // New user! Start Registration directly
+        // If it's the admin ID and not registered yet, pre-fill and go to registration
+        if (searchTerm === ADMIN_ID) {
+          setName('Main Administrator');
+          setStep(3);
+        } else {
+          setStep(3); // New user! Start Registration directly
+        }
       }
     }, 800);
   };
@@ -87,6 +96,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
     }
   };
 
+  const useAdminShortcut = () => {
+    setLoginType('mobile');
+    setEntryValue(ADMIN_ID);
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-blue-600 dark:bg-slate-950 px-6 py-12 transition-colors duration-500">
       <div className="mb-8 text-center text-white">
@@ -111,52 +125,64 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
         </div>
 
         {step === 1 && (
-          <form onSubmit={handleEntrySubmit} className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <div className="flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl mb-6">
-              <button 
-                type="button"
-                onClick={() => { setLoginType('mobile'); setEntryValue(''); }}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${loginType === 'mobile' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}
-              >
-                Mobile
-              </button>
-              <button 
-                type="button"
-                onClick={() => { setLoginType('email'); setEntryValue(''); }}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${loginType === 'email' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}
-              >
-                Email
-              </button>
-            </div>
-
-            <div className="text-left">
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Welcome!</h2>
-              <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Enter your {loginType} to continue.</p>
-              
-              <div className="relative">
-                {loginType === 'mobile' && (
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">+91</span>
-                )}
-                <input
-                  type={loginType === 'mobile' ? 'tel' : 'email'}
-                  value={entryValue}
-                  onChange={(e) => setEntryValue(loginType === 'mobile' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value)}
-                  placeholder={loginType === 'mobile' ? '00000 00000' : 'name@email.com'}
-                  className={`w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-2xl py-5 ${loginType === 'mobile' ? 'pl-14' : 'px-5'} pr-4 text-gray-800 dark:text-slate-200 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-semibold`}
-                  required
-                  autoFocus
-                />
+          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+            <form onSubmit={handleEntrySubmit} className="space-y-6">
+              <div className="flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl mb-6">
+                <button 
+                  type="button"
+                  onClick={() => { setLoginType('mobile'); setEntryValue(''); }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${loginType === 'mobile' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}
+                >
+                  Mobile
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => { setLoginType('email'); setEntryValue(''); }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${loginType === 'email' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}
+                >
+                  Email
+                </button>
               </div>
+
+              <div className="text-left">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Welcome!</h2>
+                <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Enter your {loginType} to continue.</p>
+                
+                <div className="relative">
+                  {loginType === 'mobile' && (
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">+91</span>
+                  )}
+                  <input
+                    type={loginType === 'mobile' ? 'tel' : 'email'}
+                    value={entryValue}
+                    onChange={(e) => setEntryValue(loginType === 'mobile' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value)}
+                    placeholder={loginType === 'mobile' ? '00000 00000' : 'name@email.com'}
+                    className={`w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-2xl py-5 ${loginType === 'mobile' ? 'pl-14' : 'px-5'} pr-4 text-gray-800 dark:text-slate-200 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-semibold`}
+                    required
+                    autoFocus
+                  />
+                </div>
+              </div>
+              
+              <button
+                type="submit"
+                disabled={!entryValue || isLoading}
+                className="w-full bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Continue'}
+              </button>
+            </form>
+
+            <div className="pt-4 border-t border-gray-100 dark:border-slate-800 text-center">
+              <button 
+                onClick={useAdminShortcut}
+                className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400 hover:opacity-80 transition-opacity"
+              >
+                <i className="fas fa-shield-halved mr-2"></i>
+                Admin Access
+              </button>
             </div>
-            
-            <button
-              type="submit"
-              disabled={!entryValue || isLoading}
-              className="w-full bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Continue'}
-            </button>
-          </form>
+          </div>
         )}
 
         {step === 4 && (

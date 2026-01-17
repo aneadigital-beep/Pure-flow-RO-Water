@@ -49,6 +49,7 @@ export interface Order {
   history: StatusHistory[];
   assignedToMobile?: string;
   assignedToName?: string;
+  depositAmount?: number;
 }
 
 export interface AppNotification {

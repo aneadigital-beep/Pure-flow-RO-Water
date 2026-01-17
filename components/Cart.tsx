@@ -1,26 +1,30 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CartItem } from '../types';
-import { DEFAULT_UPI_ID, TOWN_NAME } from '../constants';
+import { TOWN_NAME, CAN_DEPOSIT_FEE } from '../constants';
 
 interface CartProps {
   items: CartItem[];
+  upiId: string;
   onUpdate: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
-  onPlaceOrder: (method: 'COD' | 'UPI/Online') => void;
+  onPlaceOrder: (method: 'COD' | 'UPI/Online', extras: { deposit: number }) => void;
   deliveryFee: number;
 }
 
-const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, deliveryFee }) => {
+const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOrder, deliveryFee }) => {
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'UPI/Online'>('COD');
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [needsNewCan, setNeedsNewCan] = useState(false);
   
-  const subtotal = items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-  const total = subtotal > 0 ? subtotal + deliveryFee : 0;
+  const subtotal = useMemo(() => items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0), [items]);
+  
+  const deposit = needsNewCan ? CAN_DEPOSIT_FEE : 0;
+  
+  const total = subtotal > 0 ? subtotal + deliveryFee + deposit : 0;
 
-  // Simple QR generation using a public API (for UI demonstration)
-  const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-    `upi://pay?pa=${DEFAULT_UPI_ID}&pn=${TOWN_NAME}&am=${total}&cu=INR`
+  const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+    `upi://pay?pa=${upiId}&pn=${TOWN_NAME}&am=${total}&cu=INR&tn=PureFlow_Order`
   )}`;
 
   const handleUpdate = (id: string, delta: number) => {
@@ -30,7 +34,6 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
   };
 
   const handleRemove = (id: string) => {
-    // Add a simple exit effect by marking it, then calling parent remove
     setIsUpdating(id);
     setTimeout(() => onRemove(id), 200);
   };
@@ -107,8 +110,25 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
         ))}
       </div>
 
+      <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex items-center gap-3">
+             <div className={`h-10 w-10 rounded-xl flex items-center justify-center transition-colors ${needsNewCan ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-900 text-gray-400'}`}>
+                <i className="fas fa-bottle-water"></i>
+             </div>
+             <div className="text-left">
+                <p className="text-sm font-bold text-gray-800 dark:text-slate-100">Need New Can Bottle?</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Refundable Deposit ₹{CAN_DEPOSIT_FEE}</p>
+             </div>
+          </div>
+          <div className={`w-12 h-6 rounded-full transition-all relative ${needsNewCan ? 'bg-blue-600' : 'bg-gray-200 dark:bg-slate-700'}`}>
+             <input type="checkbox" checked={needsNewCan} onChange={() => setNeedsNewCan(!needsNewCan)} className="sr-only" />
+             <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${needsNewCan ? 'translate-x-6' : 'translate-x-0'}`}></div>
+          </div>
+        </label>
+      </div>
+
       <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-slate-700 space-y-6 relative overflow-hidden transition-all">
-        {/* Subtle Decorative Background */}
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-900/5 pointer-events-none"></div>
 
         <div className="relative z-10 text-left">
@@ -145,13 +165,13 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
         {paymentMethod === 'UPI/Online' && (
           <div className="bg-blue-50/50 dark:bg-blue-900/10 rounded-2xl p-6 border border-blue-100 dark:border-blue-900/30 animate-in zoom-in-95 duration-300 relative z-10">
             <div className="text-center space-y-4">
-              <h4 className="text-[10px] font-bold text-blue-800 dark:text-blue-200 uppercase tracking-widest">Scan to Pay</h4>
+              <h4 className="text-[10px] font-bold text-blue-800 dark:text-blue-200 uppercase tracking-widest">Scan QR to Complete Payment</h4>
               <div className="bg-white p-3 rounded-2xl inline-block shadow-lg border border-white mx-auto transition-transform hover:scale-105 cursor-pointer">
                 <img src={upiQrUrl} alt="UPI QR" className="h-40 w-40" />
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">ID: {DEFAULT_UPI_ID}</p>
-                <p className="text-[9px] text-gray-400 dark:text-slate-500 italic">Fast & Secure Payments</p>
+                <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">Total: ₹{total}</p>
+                <p className="text-[9px] text-gray-400 dark:text-slate-500 italic">UPI ID: {upiId}</p>
               </div>
             </div>
           </div>
@@ -161,16 +181,21 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
           <div className="space-y-2">
             <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400 font-medium">
               <span>Items Total</span>
-              <span className="dark:text-slate-200">₹{subtotal}</span>
+              <span className="dark:text-slate-200 font-bold">₹{subtotal}</span>
             </div>
             <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400 font-medium">
-              <span>Delivery Charges</span>
-              <span className="text-green-600 dark:text-green-400 font-bold">₹{deliveryFee}</span>
+              <span>Delivery Fee</span>
+              <span className="text-blue-600 dark:text-blue-400 font-bold">₹{deliveryFee}</span>
             </div>
+            {needsNewCan && (
+              <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400 font-medium">
+                <span>Can Security Deposit</span>
+                <span className="text-orange-600 dark:text-orange-400 font-bold">₹{CAN_DEPOSIT_FEE}</span>
+              </div>
+            )}
           </div>
           
           <div className="relative group">
-             {/* Glowing border effect for total section */}
              <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
              
              <div className="relative bg-gradient-to-br from-blue-600 to-blue-700 dark:from-slate-900 dark:to-slate-950 p-5 rounded-[1.5rem] flex justify-between items-center transition-all shadow-xl overflow-hidden border border-white/10 dark:border-blue-500/20">
@@ -178,8 +203,8 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/10 rounded-full -ml-12 -mb-12 blur-2xl"></div>
                 
                 <div className="z-10">
-                  <span className="font-bold text-blue-100 dark:text-blue-400 text-xs uppercase tracking-widest">Total Payable</span>
-                  <p className="text-[8px] text-blue-200/60 dark:text-slate-500 font-bold uppercase mt-1">Inclusive of all taxes</p>
+                  <span className="font-bold text-blue-100 dark:text-blue-400 text-xs uppercase tracking-widest">Grand Total</span>
+                  <p className="text-[8px] text-blue-200/60 dark:text-slate-500 font-bold uppercase mt-1">Ready for delivery</p>
                 </div>
                 
                 <div className="text-right z-10">
@@ -193,7 +218,7 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
         </div>
         
         <button
-          onClick={() => onPlaceOrder(paymentMethod)}
+          onClick={() => onPlaceOrder(paymentMethod, { deposit })}
           className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-200 dark:shadow-none transition-all active:scale-[0.97] flex items-center justify-center gap-3 relative z-10 overflow-hidden"
         >
           <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity"></div>
