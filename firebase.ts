@@ -119,6 +119,15 @@ export const updateDocument = async (collectionName: string, id: string, data: a
 };
 
 /**
+ * Deletes a document from a collection.
+ */
+export const deleteDocument = async (collectionName: string, id: string) => {
+  const existing = getLocalData(collectionName);
+  const filtered = existing.filter(doc => String(doc.id) !== String(id));
+  setLocalData(collectionName, filtered);
+};
+
+/**
  * Fetches a single document by ID.
  */
 export const getDocument = async (collectionName: string, id: string) => {

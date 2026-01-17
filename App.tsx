@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
-import { db, COLLECTIONS, syncCollection, upsertDocument, updateDocument, getDocument, orderBy } from './firebase';
+import { db, COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy } from './firebase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Cart from './components/Cart';
@@ -192,6 +192,20 @@ const App: React.FC = () => {
     await updateDocument(COLLECTIONS.USERS, String(mobile), { isDeliveryBoy: isDelivery });
   };
 
+  const updateAdminRole = async (mobile: string, isAdmin: boolean) => {
+    if (mobile === '9999999999' && !isAdmin) {
+      alert("Primary admin cannot be demoted.");
+      return;
+    }
+    await updateDocument(COLLECTIONS.USERS, String(mobile), { isAdmin });
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this product?")) {
+      await deleteDocument(COLLECTIONS.PRODUCTS, id);
+    }
+  };
+
   const toggleDarkMode = () => setIsDarkMode(prev => !prev);
 
   if (appLoading) {
@@ -254,11 +268,15 @@ const App: React.FC = () => {
             products={products} 
             onUpdateProduct={(p) => updateDocument(COLLECTIONS.PRODUCTS, p.id, p)} 
             onAddProduct={(p) => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p)} 
+            onDeleteProduct={handleDeleteProduct}
             orders={allOrders} onUpdateStatus={updateOrderStatus} onBack={() => setCurrentView('profile')}
             deliveryFee={deliveryFee} 
             onUpdateDeliveryFee={(fee) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: fee })} 
             registeredUsers={registeredUsers} notifications={notifications} onImportData={(d) => {}}
-            onAssignOrder={assignOrder} onAddStaff={(mobile, name) => upsertDocument(COLLECTIONS.USERS, mobile, { mobile, name, isDeliveryBoy: true, address: 'Staff' })} onUpdateStaffRole={updateStaffRole}
+            onAssignOrder={assignOrder} 
+            onAddStaff={(mobile, name) => upsertDocument(COLLECTIONS.USERS, mobile, { mobile, name, isDeliveryBoy: true, address: 'Staff' })} 
+            onUpdateStaffRole={updateStaffRole}
+            onUpdateAdminRole={updateAdminRole}
           />
         )}
         {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
