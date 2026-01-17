@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
 import { COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy, getTownId, setTownId } from './firebase';
+import { supabase, syncOrderToSupabase, fetchOrdersFromSupabase } from './supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Cart from './components/Cart';
@@ -52,6 +53,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => setAppLoading(false), 2000);
+
+    const loadSupabaseData = async () => {
+      const cloudOrders = await fetchOrdersFromSupabase();
+      if (cloudOrders && cloudOrders.length > 0) {
+        cloudOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
+      }
+    };
+    loadSupabaseData();
 
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
       setAllOrders(data as Order[]);
@@ -143,6 +152,7 @@ const App: React.FC = () => {
   const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online') => {
     if (!user || cart.length === 0) return;
     const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
+    const productSummary = cart.map(item => `${item.quantity}x ${item.product.name}`).join(', ');
     const now = new Date();
     const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const orderId = `ORD-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -151,7 +161,9 @@ const App: React.FC = () => {
       id: orderId,
       userMobile: String(user.mobile || user.email),
       userName: user.name,
-      userAddress: `${user.address}, ${user.pincode}`,
+      userAddress: user.address,
+      userZipcode: user.pincode,
+      productSummary: productSummary,
       date: now.toLocaleDateString(),
       createdAt: now.toISOString(),
       total: subtotal + deliveryFee,
@@ -162,6 +174,8 @@ const App: React.FC = () => {
     };
 
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
+    await syncOrderToSupabase(newOrder);
+
     setCart([]);
     setCurrentView('orders');
     addNotification('New Order!', `${user.name} placed a new order.`, 'order', true);
@@ -179,22 +193,32 @@ const App: React.FC = () => {
       note: note || `Status updated to ${status}`
     };
 
-    await updateDocument(COLLECTIONS.ORDERS, orderId, {
+    const updatedData = {
       status,
       history: [...orderToUpdate.history, historyEntry]
-    });
+    };
+
+    await updateDocument(COLLECTIONS.ORDERS, orderId, updatedData);
+    await syncOrderToSupabase({ ...orderToUpdate, ...updatedData });
 
     addNotification(`Order ${status}!`, `Order ${orderId} is now ${status.toLowerCase()}.`, 'system', false, orderToUpdate.userMobile);
   }, [allOrders, addNotification]);
 
   const assignOrder = useCallback(async (orderId: string, staffMobile: string | undefined) => {
+    const orderToUpdate = allOrders.find(o => o.id === orderId);
+    if (!orderToUpdate) return;
+
     const staff = registeredUsers.find(u => String(u.mobile || u.email) === String(staffMobile));
-    await updateDocument(COLLECTIONS.ORDERS, orderId, {
+    const assignmentData = {
       assignedToMobile: staffMobile ? String(staffMobile) : null, 
       assignedToName: staff?.name || null
-    });
+    };
+
+    await updateDocument(COLLECTIONS.ORDERS, orderId, assignmentData);
+    await syncOrderToSupabase({ ...orderToUpdate, ...assignmentData });
+
     if (staffMobile) addNotification('New Task', `Order ${orderId} assigned to you.`, 'system', false, String(staffMobile));
-  }, [registeredUsers, addNotification]);
+  }, [registeredUsers, allOrders, addNotification]);
 
   const updateStaffRole = async (id: string, isDelivery: boolean) => {
     await updateDocument(COLLECTIONS.USERS, String(id), { isDeliveryBoy: isDelivery });

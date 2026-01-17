@@ -38,6 +38,8 @@ export interface Order {
   userMobile: string;
   userName: string;
   userAddress: string;
+  userZipcode: string;
+  productSummary: string;
   date: string;
   createdAt: string;
   total: number;
