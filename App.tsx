@@ -35,14 +35,25 @@ const App: React.FC = () => {
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    const saved = localStorage.getItem('pureflow_notifications');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [deliveryFee, setDeliveryFee] = useState<number>(DEFAULT_DELIVERY_FEE);
   const [upiId, setUpiId] = useState<string>(DEFAULT_UPI_ID);
   const [currentView, setCurrentView] = useState<View>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeToast, setActiveToast] = useState<{title: string, message: string} | null>(null);
   const [appLoading, setAppLoading] = useState(true);
-  const [townId, setInternalTownId] = useState(getTownId());
+  const [isCloudSynced, setIsCloudSynced] = useState(false);
+  const [townId] = useState(getTownId());
+
+  // Utility to normalize mobile numbers
+  const normalizeId = (id: string) => id.replace(/\D/g, '').trim();
+
+  useEffect(() => {
+    localStorage.setItem('pureflow_notifications', JSON.stringify(notifications));
+  }, [notifications]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -59,23 +70,24 @@ const App: React.FC = () => {
     const loadCloudData = async () => {
       try {
         const cloudOrders = await fetchOrdersFromSupabase();
-        if (cloudOrders && cloudOrders.length > 0) {
+        if (cloudOrders) {
+          setIsCloudSynced(true);
           cloudOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
         }
         const cloudUsers = await fetchUsersFromSupabase();
-        if (cloudUsers && cloudUsers.length > 0) {
+        if (cloudUsers) {
           cloudUsers.forEach(u => {
-            const id = u.mobile || u.email;
+            const id = normalizeId(u.mobile || u.email || '');
             if (id) upsertDocument(COLLECTIONS.USERS, id, u);
           });
         }
       } catch (e) {
-        console.warn("Initial cloud fetch failed, relying on local cache.");
+        setIsCloudSynced(false);
+        console.warn("Cloud sync failed.");
       }
     };
     loadCloudData();
 
-    // 1. Subscribe to Local Changes (truly reactive UI)
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
       setAllOrders(data as Order[]);
     }, [orderBy('createdAt', 'desc')]);
@@ -95,29 +107,22 @@ const App: React.FC = () => {
     const unsubSettings = syncCollection(COLLECTIONS.SETTINGS, (data) => {
       const feeSetting = data.find(d => d.id === 'deliveryFee');
       if (feeSetting) setDeliveryFee(feeSetting.value);
-      
       const upiSetting = data.find(d => d.id === 'upiId');
       if (upiSetting) setUpiId(upiSetting.value);
     });
 
-    // 2. Subscribe to Supabase Realtime (Cloud Sync)
     const orderSubscription = subscribeToTable('orders', (payload) => {
       if (payload.new) {
         upsertDocument(COLLECTIONS.ORDERS, payload.new.id, payload.new);
-        
         if (user && payload.eventType === 'UPDATE') {
-           const isMyOrder = String(payload.new.userMobile) === String(user.mobile || user.email);
+           const isMyOrder = normalizeId(payload.new.userMobile) === normalizeId(user.mobile || user.email || '');
            if (isMyOrder && payload.new.status !== payload.old?.status) {
              addNotification('Order Updated', `Your order #${payload.new.id} is now ${payload.new.status}`, 'system', false, payload.new.userMobile);
            }
         }
-      }
-    });
-
-    const userSubscription = subscribeToTable('users', (payload) => {
-      if (payload.new) {
-        const id = payload.new.mobile || payload.new.email;
-        if (id) upsertDocument(COLLECTIONS.USERS, id, payload.new);
+        if (payload.eventType === 'INSERT' && user?.isAdmin) {
+          addNotification('New Order Received', `Order #${payload.new.id} just came in from ${payload.new.userName}`, 'order', true);
+        }
       }
     });
 
@@ -128,13 +133,7 @@ const App: React.FC = () => {
       unsubProducts();
       unsubSettings();
       orderSubscription.unsubscribe();
-      userSubscription.unsubscribe();
     };
-  }, [user]);
-
-  useEffect(() => {
-    if (user) localStorage.setItem('pureflow_user', JSON.stringify(user));
-    else localStorage.removeItem('pureflow_user');
   }, [user]);
 
   const addNotification = useCallback((title: string, message: string, type: AppNotification['type'], forAdmin: boolean, userMobile?: string) => {
@@ -146,11 +145,11 @@ const App: React.FC = () => {
       type,
       isRead: false,
       forAdmin,
-      userMobile: userMobile ? String(userMobile) : undefined
+      userMobile: userMobile ? normalizeId(userMobile) : undefined
     };
     setNotifications(prev => [newNotif, ...prev]);
     if (user) {
-      const isRelevantUser = !forAdmin && String(user.mobile || user.email) === String(userMobile);
+      const isRelevantUser = !forAdmin && normalizeId(user.mobile || user.email || '') === normalizeId(userMobile || '');
       const isRelevantAdmin = forAdmin && user.isAdmin;
       if (isRelevantUser || isRelevantAdmin) {
         setActiveToast({ title, message });
@@ -160,15 +159,16 @@ const App: React.FC = () => {
 
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; avatar?: string; pin?: string }) => {
     const ADMIN_ID = '9999999999';
-    const id = creds.mobile || creds.email || 'guest';
-    const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
+    const rawId = creds.mobile || creds.email || 'guest';
+    const id = normalizeId(rawId);
     
-    const isAdmin = creds.mobile === ADMIN_ID || creds.email?.includes('admin@pureflow.com') || existingCloudUser?.isAdmin; 
+    const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
+    const isAdmin = id === ADMIN_ID || creds.email?.includes('admin@pureflow.com') || existingCloudUser?.isAdmin; 
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy;
 
     const newUser: User = { 
-      mobile: creds.mobile || existingCloudUser?.mobile,
-      email: creds.email || existingCloudUser?.email,
+      mobile: creds.mobile,
+      email: creds.email,
       pin: creds.pin || existingCloudUser?.pin,
       name: creds.name || existingCloudUser?.name || 'User', 
       address: creds.address || existingCloudUser?.address || '', 
@@ -204,7 +204,7 @@ const App: React.FC = () => {
     
     const newOrder: Order = {
       id: orderId,
-      userMobile: String(user.mobile || user.email),
+      userMobile: normalizeId(user.mobile || user.email || ''),
       userName: user.name,
       userAddress: user.address,
       userZipcode: user.pincode,
@@ -220,91 +220,48 @@ const App: React.FC = () => {
     };
 
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
-    await syncOrderToSupabase(newOrder);
+    const synced = await syncOrderToSupabase(newOrder);
+    if (!synced) {
+      setActiveToast({ title: "Local Saved", message: "Order placed locally. Will sync when cloud is reachable." });
+    }
 
     setCart([]);
     setCurrentView('orders');
-    addNotification('New Order!', `${user.name} placed a new order.`, 'order', true);
+    addNotification('Order Confirmed', `Order #${orderId} is being prepared.`, 'order', false, newOrder.userMobile);
   };
 
   const updateOrderStatus = useCallback(async (orderId: string, status: Order['status'], note?: string) => {
     const now = new Date();
     const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
     const orderToUpdate = allOrders.find(o => o.id === orderId);
     if (!orderToUpdate) return;
-
-    const historyEntry: StatusHistory = {
-      status,
-      timestamp: `${now.toLocaleDateString()} ${timestamp}`,
-      note: note || `Status updated to ${status}`
-    };
 
     const updatedOrder = {
       ...orderToUpdate,
       status,
-      history: [...orderToUpdate.history, historyEntry]
+      history: [...orderToUpdate.history, { status, timestamp: `${now.toLocaleDateString()} ${timestamp}`, note: note || `Status updated to ${status}` }]
     };
 
     await upsertDocument(COLLECTIONS.ORDERS, orderId, updatedOrder);
     await syncOrderToSupabase(updatedOrder);
-
-    addNotification(`Order ${status}!`, `Order ${orderId} is now ${status.toLowerCase()}.`, 'system', false, orderToUpdate.userMobile);
+    addNotification(`Order ${status}`, `Order ${orderId} is now ${status.toLowerCase()}.`, 'system', false, orderToUpdate.userMobile);
   }, [allOrders, addNotification]);
 
   const assignOrder = useCallback(async (orderId: string, staffMobile: string | undefined) => {
     const orderToUpdate = allOrders.find(o => o.id === orderId);
     if (!orderToUpdate) return;
-
-    const staff = registeredUsers.find(u => String(u.mobile || u.email) === String(staffMobile));
-    const assignmentData = {
-      ...orderToUpdate,
-      assignedToMobile: staffMobile ? String(staffMobile) : null, 
-      assignedToName: staff?.name || null
-    };
-
+    const staff = registeredUsers.find(u => normalizeId(u.mobile || u.email || '') === normalizeId(staffMobile || ''));
+    const assignmentData = { ...orderToUpdate, assignedToMobile: staffMobile, assignedToName: staff?.name };
     await upsertDocument(COLLECTIONS.ORDERS, orderId, assignmentData);
     await syncOrderToSupabase(assignmentData);
-
-    if (staffMobile) addNotification('New Task', `Order ${orderId} assigned to you.`, 'system', false, String(staffMobile));
+    if (staffMobile) addNotification('New Task', `Order ${orderId} assigned to you.`, 'delivery', false, staffMobile);
   }, [registeredUsers, allOrders, addNotification]);
 
-  const updateStaffRole = async (id: string, isDelivery: boolean) => {
-    const u = registeredUsers.find(user => (user.mobile || user.email) === id);
-    if (u) {
-      const updated = { ...u, isDeliveryBoy: isDelivery };
-      await upsertDocument(COLLECTIONS.USERS, String(id), updated);
-      await syncUserToSupabase(updated);
-    }
-  };
-
-  const updateAdminRole = async (id: string, isAdmin: boolean) => {
-    if (id === '9999999999' && !isAdmin) {
-      alert("Primary admin cannot be demoted.");
-      return;
-    }
-    const u = registeredUsers.find(user => (user.mobile || user.email) === id);
-    if (u) {
-      const updated = { ...u, isAdmin };
-      await upsertDocument(COLLECTIONS.USERS, String(id), updated);
-      await syncUserToSupabase(updated);
-    }
-  };
-
-  const handleDeleteProduct = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this product?")) {
-      await deleteDocument(COLLECTIONS.PRODUCTS, id);
-    }
-  };
-
-  const toggleDarkMode = () => setIsDarkMode(prev => !prev);
-
   if (appLoading) return <SplashScreen />;
-
   if (!user) return <Login onLogin={handleLogin} registeredUsers={registeredUsers} />;
 
-  const userOrders = allOrders.filter(o => String(o.userMobile) === String(user.mobile || user.email));
-  const relevantNotifications = notifications.filter(n => (n.forAdmin && user.isAdmin) || (!n.forAdmin && String(n.userMobile) === String(user.mobile || user.email)));
+  const userOrders = allOrders.filter(o => normalizeId(o.userMobile) === normalizeId(user.mobile || user.email || ''));
+  const relevantNotifications = notifications.filter(n => (n.forAdmin && user.isAdmin) || (!n.forAdmin && normalizeId(n.userMobile || '') === normalizeId(user.mobile || user.email || '')));
   const unreadCount = relevantNotifications.filter(n => !n.isRead).length;
 
   return (
@@ -318,14 +275,15 @@ const App: React.FC = () => {
               <i className="fas fa-droplet text-blue-200"></i>
               {TOWN_NAME}
             </h1>
+            <div className={`h-2 w-2 rounded-full ${isCloudSynced ? 'bg-green-400' : 'bg-red-400'} animate-pulse`} title={isCloudSynced ? 'Cloud Synced' : 'Offline Mode'}></div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={toggleDarkMode} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-white/10 transition-colors">
               <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i>
             </button>
             <button onClick={() => setCurrentView('notifications')} className="relative p-2 rounded-full hover:bg-white/10 transition-colors">
               <i className="fas fa-bell"></i>
-              {unreadCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full border border-blue-600 dark:border-blue-800"></span>}
+              {unreadCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full border border-blue-600"></span>}
             </button>
             <div className="h-8 w-8 rounded-full border border-white/20 overflow-hidden cursor-pointer" onClick={() => setCurrentView('profile')}>
               {user.avatar ? <img src={user.avatar} className="h-full w-full object-cover" alt="" /> : <div className="h-full w-full flex items-center justify-center text-xs font-bold uppercase bg-white/20">{user.name.charAt(0)}</div>}
@@ -336,47 +294,16 @@ const App: React.FC = () => {
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 pt-6">
         {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
-        {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, delta) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + delta)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
+        {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
         {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
         {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} />}
         {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
-        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile || user.email))} onUpdateStatus={updateOrderStatus} user={user} isLive={true} />}
-        {currentView === 'admin' && (
-          <Admin 
-            products={products} 
-            onUpdateProduct={(p) => updateDocument(COLLECTIONS.PRODUCTS, p.id, p)} 
-            onAddProduct={(p) => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p)} 
-            onDeleteProduct={handleDeleteProduct}
-            orders={allOrders} onUpdateStatus={updateOrderStatus} onBack={() => setCurrentView('profile')}
-            deliveryFee={deliveryFee} 
-            upiId={upiId}
-            onUpdateDeliveryFee={(fee) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: fee })} 
-            onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })}
-            registeredUsers={registeredUsers} notifications={notifications} onImportData={(d) => {}}
-            onAssignOrder={assignOrder} 
-            onAddStaff={(id, name) => upsertDocument(COLLECTIONS.USERS, id, { id, mobile: id, name, isDeliveryBoy: true, address: 'Staff' })} 
-            onUpdateStaffRole={updateStaffRole}
-            onUpdateAdminRole={updateAdminRole}
-            townId={townId}
-            onSetTownId={setTownId}
-          />
-        )}
+        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile || '') === normalizeId(user.mobile || user.email || ''))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
+        {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} onUpdateDeliveryFee={(f) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f })} onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })} onAssignOrder={assignOrder} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
         {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
       </main>
 
-      {currentView !== 'assistant' && (
-        <button onClick={() => setCurrentView('assistant')} className="fixed bottom-24 right-6 h-14 w-14 bg-blue-600 dark:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center z-40 transition-transform active:scale-95">
-          <i className="fas fa-robot text-xl"></i>
-        </button>
-      )}
-
-      {currentView !== 'assistant' && (
-        <Navbar 
-          currentView={['admin', 'delivery'].includes(currentView) ? 'profile' : currentView} 
-          onViewChange={setCurrentView} 
-          cartCount={cart.reduce((a, b) => a + b.quantity, 0)} 
-        />
-      )}
+      <Navbar currentView={currentView} onViewChange={setCurrentView} cartCount={cart.reduce((a, b) => a + b.quantity, 0)} />
     </div>
   );
 };
