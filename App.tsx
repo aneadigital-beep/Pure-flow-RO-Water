@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
@@ -14,6 +15,7 @@ import DeliveryDashboard from './components/DeliveryDashboard';
 import Notifications from './components/Notifications';
 import Assistant from './components/Assistant';
 import Toast from './components/Toast';
+import SplashScreen from './components/SplashScreen';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
@@ -51,7 +53,8 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setAppLoading(false), 2000);
+    // Branded Splash Screen Timer (2.5 seconds for visual impact)
+    const timer = setTimeout(() => setAppLoading(false), 2500);
 
     const loadCloudData = async () => {
       try {
@@ -76,7 +79,6 @@ const App: React.FC = () => {
 
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
       setAllOrders(data as Order[]);
-      setAppLoading(false);
     }, [orderBy('createdAt', 'desc')]);
 
     const unsubUsers = syncCollection(COLLECTIONS.USERS, (data) => {
@@ -263,12 +265,7 @@ const App: React.FC = () => {
   const toggleDarkMode = () => setIsDarkMode(prev => !prev);
 
   if (appLoading) {
-    return (
-      <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center text-white p-6">
-        <div className="h-16 w-16 border-4 border-white/20 border-t-white rounded-full animate-spin mb-4"></div>
-        <p className="font-bold text-lg animate-pulse">Initializing PureFlow...</p>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (!user) {
