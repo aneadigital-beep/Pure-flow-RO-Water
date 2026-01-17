@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User } from '../types';
 
@@ -27,17 +26,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
     if (!entryValue) return;
 
     setIsLoading(true);
+    const searchTerm = entryValue.trim();
+
     setTimeout(() => {
+      // Robust lookup: check both mobile and email fields across all users
       const user = registeredUsers.find(u => 
-        loginType === 'mobile' ? u.mobile === entryValue : u.email === entryValue
+        (u.mobile && u.mobile === searchTerm) || 
+        (u.email && u.email.toLowerCase() === searchTerm.toLowerCase())
       );
 
       setIsLoading(false);
       if (user) {
         setExistingUser(user);
-        setStep(4); // Prompt for PIN
+        setStep(4); // Found user! Go to PIN step
       } else {
-        setStep(2); // New user, send simulated OTP
+        setStep(2); // New user! Start OTP/Registration
       }
     }, 800);
   };
@@ -48,7 +51,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
       setIsLoading(true);
       setTimeout(() => {
         setIsLoading(false);
-        setStep(3); // New user profile setup
+        setStep(3); // Registration step
       }, 800);
     }
   };
@@ -108,7 +111,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
 
       <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden transition-colors">
         
-        {/* Step Indicator */}
         <div className="flex justify-center gap-1.5 mb-8">
           {[1, 2, 3].map((s) => (
             <div 
@@ -229,7 +231,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
             >
               Unlock Account
             </button>
-            <button type="button" onClick={() => setStep(2)} className="w-full text-xs text-gray-400 font-bold uppercase tracking-widest hover:text-blue-500">Login via OTP instead</button>
+            <button type="button" onClick={() => setStep(1)} className="w-full text-xs text-gray-400 font-bold uppercase tracking-widest hover:text-blue-500">Try different account</button>
           </form>
         )}
 

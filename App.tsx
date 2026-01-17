@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
 import { COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy, getTownId, setTownId } from './firebase';
-import { supabase, syncOrderToSupabase, fetchOrdersFromSupabase } from './supabase';
+import { supabase, syncOrderToSupabase, fetchOrdersFromSupabase, syncUserToSupabase, fetchUsersFromSupabase } from './supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Cart from './components/Cart';
@@ -54,13 +53,26 @@ const App: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => setAppLoading(false), 2000);
 
-    const loadSupabaseData = async () => {
-      const cloudOrders = await fetchOrdersFromSupabase();
-      if (cloudOrders && cloudOrders.length > 0) {
-        cloudOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
+    const loadCloudData = async () => {
+      try {
+        // Load Orders
+        const cloudOrders = await fetchOrdersFromSupabase();
+        if (cloudOrders && cloudOrders.length > 0) {
+          cloudOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
+        }
+        // Load Users
+        const cloudUsers = await fetchUsersFromSupabase();
+        if (cloudUsers && cloudUsers.length > 0) {
+          cloudUsers.forEach(u => {
+            const id = u.mobile || u.email;
+            if (id) upsertDocument(COLLECTIONS.USERS, id, u);
+          });
+        }
+      } catch (e) {
+        console.warn("Cloud initial fetch encountered an issue. Continuing with local data.");
       }
     };
-    loadSupabaseData();
+    loadCloudData();
 
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
       setAllOrders(data as Order[]);
@@ -120,15 +132,17 @@ const App: React.FC = () => {
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; avatar?: string; pin?: string }) => {
     const ADMIN_ID = '9999999999';
     const id = creds.mobile || creds.email || 'guest';
+    
+    // Fetch most current data from local/cloud before saving
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
     
     const isAdmin = creds.mobile === ADMIN_ID || creds.email?.includes('admin@pureflow.com') || existingCloudUser?.isAdmin; 
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy;
 
     const newUser: User = { 
-      mobile: creds.mobile,
-      email: creds.email,
-      pin: creds.pin,
+      mobile: creds.mobile || existingCloudUser?.mobile,
+      email: creds.email || existingCloudUser?.email,
+      pin: creds.pin || existingCloudUser?.pin,
       name: creds.name || existingCloudUser?.name || 'User', 
       address: creds.address || existingCloudUser?.address || '', 
       pincode: creds.pincode || existingCloudUser?.pincode || '', 
@@ -139,7 +153,11 @@ const App: React.FC = () => {
     };
     
     setUser(newUser);
+    // Sync locally
     await upsertDocument(COLLECTIONS.USERS, id, newUser);
+    // Sync to Supabase cloud
+    await syncUserToSupabase(newUser);
+    
     setCurrentView('home');
   };
 
@@ -222,6 +240,8 @@ const App: React.FC = () => {
 
   const updateStaffRole = async (id: string, isDelivery: boolean) => {
     await updateDocument(COLLECTIONS.USERS, String(id), { isDeliveryBoy: isDelivery });
+    const u = registeredUsers.find(user => (user.mobile || user.email) === id);
+    if (u) syncUserToSupabase({ ...u, isDeliveryBoy: isDelivery });
   };
 
   const updateAdminRole = async (id: string, isAdmin: boolean) => {
@@ -230,6 +250,8 @@ const App: React.FC = () => {
       return;
     }
     await updateDocument(COLLECTIONS.USERS, String(id), { isAdmin });
+    const u = registeredUsers.find(user => (user.mobile || user.email) === id);
+    if (u) syncUserToSupabase({ ...u, isAdmin });
   };
 
   const handleDeleteProduct = async (id: string) => {

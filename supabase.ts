@@ -7,7 +7,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /**
  * Syncs an order to Supabase.
- * Assumes a table 'orders' exists with columns matching the Order interface.
  */
 export const syncOrderToSupabase = async (order: any) => {
   try {
@@ -16,12 +15,44 @@ export const syncOrderToSupabase = async (order: any) => {
       .upsert(order, { onConflict: 'id' });
     
     if (error) {
-      console.error('Supabase Sync Error:', error.message);
+      if (error.code === '42P01') {
+        console.error('CRITICAL: Table "orders" missing. Please run the SQL script in Supabase Editor.');
+      } else {
+        console.error('Supabase Order Sync Error:', error.message, error.details);
+      }
       return false;
     }
     return true;
-  } catch (err) {
-    console.error('Supabase Connection Failed:', err);
+  } catch (err: any) {
+    console.error('Supabase Connection Failed:', err.message || err);
+    return false;
+  }
+};
+
+/**
+ * Syncs a user profile to Supabase.
+ */
+export const syncUserToSupabase = async (user: any) => {
+  try {
+    const id = user.mobile || user.email || 'unknown';
+    // Clean data for Supabase (remove transient properties)
+    const { isLoggedIn, ...cleanUser } = user;
+    
+    const { error } = await supabase
+      .from('users')
+      .upsert({ ...cleanUser, id }, { onConflict: 'id' });
+    
+    if (error) {
+      if (error.code === '42P01') {
+        console.error('CRITICAL: Table "users" missing. Please run the SQL script in Supabase Editor.');
+      } else {
+        console.error('Supabase User Sync Error:', error.message);
+      }
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.error('Supabase User Sync Failed:', err.message || err);
     return false;
   }
 };
@@ -36,10 +67,37 @@ export const fetchOrdersFromSupabase = async () => {
       .select('*')
       .order('createdAt', { ascending: false });
     
-    if (error) throw error;
+    if (error) {
+       console.error('Supabase Fetch Orders Error:', error.message);
+       return null;
+    }
     return data;
-  } catch (err) {
-    console.error('Supabase Fetch Error:', err);
+  } catch (err: any) {
+    console.error('Supabase System Error:', err.message || err);
+    return null;
+  }
+};
+
+/**
+ * Fetches all registered users from Supabase.
+ */
+export const fetchUsersFromSupabase = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*');
+    
+    if (error) {
+      if (error.code === '42P01') {
+        console.error('CRITICAL: Table "users" missing. Please run the SQL script in Supabase Editor.');
+      } else {
+        console.error('Supabase User Fetch Error:', error.message);
+      }
+      return null;
+    }
+    return data;
+  } catch (err: any) {
+    console.error('Supabase User Fetch Failed:', err.message || err);
     return null;
   }
 };
