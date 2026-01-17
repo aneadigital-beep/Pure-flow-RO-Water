@@ -10,9 +10,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
  */
 export const syncOrderToSupabase = async (order: any) => {
   try {
+    // Remove local-only properties like lastUpdated that are not in the Supabase schema
+    const { lastUpdated, ...cleanOrder } = order;
+    
     const { error } = await supabase
       .from('orders')
-      .upsert(order, { onConflict: 'id' });
+      .upsert(cleanOrder, { onConflict: 'id' });
     
     if (error) {
       if (error.code === '42P01') {
@@ -35,8 +38,8 @@ export const syncOrderToSupabase = async (order: any) => {
 export const syncUserToSupabase = async (user: any) => {
   try {
     const id = user.mobile || user.email || 'unknown';
-    // Clean data for Supabase (remove transient properties)
-    const { isLoggedIn, ...cleanUser } = user;
+    // Clean data for Supabase (remove transient properties like isLoggedIn and lastUpdated)
+    const { isLoggedIn, lastUpdated, ...cleanUser } = user;
     
     const { error } = await supabase
       .from('users')
@@ -100,4 +103,20 @@ export const fetchUsersFromSupabase = async () => {
     console.error('Supabase User Fetch Failed:', err.message || err);
     return null;
   }
+};
+
+/**
+ * Subscribes to real-time changes for a specific table.
+ */
+export const subscribeToTable = (tableName: string, callback: (payload: any) => void) => {
+  return supabase
+    .channel(`public:${tableName}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: tableName },
+      (payload) => {
+        callback(payload);
+      }
+    )
+    .subscribe();
 };

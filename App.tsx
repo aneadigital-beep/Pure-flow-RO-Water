@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
 import { COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy, getTownId, setTownId } from './firebase';
-import { supabase, syncOrderToSupabase, fetchOrdersFromSupabase, syncUserToSupabase, fetchUsersFromSupabase } from './supabase';
+import { supabase, syncOrderToSupabase, fetchOrdersFromSupabase, syncUserToSupabase, fetchUsersFromSupabase, subscribeToTable } from './supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Cart from './components/Cart';
@@ -53,17 +52,14 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   useEffect(() => {
-    // Branded Splash Screen Timer (2.5 seconds for visual impact)
     const timer = setTimeout(() => setAppLoading(false), 2500);
 
     const loadCloudData = async () => {
       try {
-        // Load Orders
         const cloudOrders = await fetchOrdersFromSupabase();
         if (cloudOrders && cloudOrders.length > 0) {
           cloudOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
         }
-        // Load Users
         const cloudUsers = await fetchUsersFromSupabase();
         if (cloudUsers && cloudUsers.length > 0) {
           cloudUsers.forEach(u => {
@@ -72,11 +68,12 @@ const App: React.FC = () => {
           });
         }
       } catch (e) {
-        console.warn("Cloud initial fetch encountered an issue. Continuing with local data.");
+        console.warn("Initial cloud fetch failed, relying on local cache.");
       }
     };
     loadCloudData();
 
+    // 1. Subscribe to Local Changes (truly reactive UI)
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
       setAllOrders(data as Order[]);
     }, [orderBy('createdAt', 'desc')]);
@@ -98,14 +95,40 @@ const App: React.FC = () => {
       if (feeSetting) setDeliveryFee(feeSetting.value);
     });
 
+    // 2. Subscribe to Supabase Realtime (Cloud Sync)
+    const orderSubscription = subscribeToTable('orders', (payload) => {
+      if (payload.new) {
+        // When any device updates an order, update our local store
+        // which will trigger unsubOrders -> setAllOrders -> Admin UI update
+        upsertDocument(COLLECTIONS.ORDERS, payload.new.id, payload.new);
+        
+        // Notify user if it's their order or if they are admin
+        if (user && payload.eventType === 'UPDATE') {
+           const isMyOrder = String(payload.new.userMobile) === String(user.mobile || user.email);
+           if (isMyOrder && payload.new.status !== payload.old?.status) {
+             addNotification('Order Updated', `Your order #${payload.new.id} is now ${payload.new.status}`, 'system', false, payload.new.userMobile);
+           }
+        }
+      }
+    });
+
+    const userSubscription = subscribeToTable('users', (payload) => {
+      if (payload.new) {
+        const id = payload.new.mobile || payload.new.email;
+        if (id) upsertDocument(COLLECTIONS.USERS, id, payload.new);
+      }
+    });
+
     return () => {
       clearTimeout(timer);
       unsubOrders();
       unsubUsers();
       unsubProducts();
       unsubSettings();
+      orderSubscription.unsubscribe();
+      userSubscription.unsubscribe();
     };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (user) localStorage.setItem('pureflow_user', JSON.stringify(user));
@@ -125,7 +148,9 @@ const App: React.FC = () => {
     };
     setNotifications(prev => [newNotif, ...prev]);
     if (user) {
-      if ((forAdmin && user.isAdmin) || (!forAdmin && String(user.mobile || user.email) === String(userMobile))) {
+      const isRelevantUser = !forAdmin && String(user.mobile || user.email) === String(userMobile);
+      const isRelevantAdmin = forAdmin && user.isAdmin;
+      if (isRelevantUser || isRelevantAdmin) {
         setActiveToast({ title, message });
       }
     }
@@ -134,8 +159,6 @@ const App: React.FC = () => {
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; avatar?: string; pin?: string }) => {
     const ADMIN_ID = '9999999999';
     const id = creds.mobile || creds.email || 'guest';
-    
-    // Fetch most current data from local/cloud before saving
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
     
     const isAdmin = creds.mobile === ADMIN_ID || creds.email?.includes('admin@pureflow.com') || existingCloudUser?.isAdmin; 
@@ -155,19 +178,12 @@ const App: React.FC = () => {
     };
     
     setUser(newUser);
-    // Sync locally
     await upsertDocument(COLLECTIONS.USERS, id, newUser);
-    // Sync to Supabase cloud
     await syncUserToSupabase(newUser);
     
-    // Role-based redirection
-    if (isAdmin) {
-      setCurrentView('admin');
-    } else if (isDeliveryBoy) {
-      setCurrentView('delivery');
-    } else {
-      setCurrentView('home');
-    }
+    if (isAdmin) setCurrentView('admin');
+    else if (isDeliveryBoy) setCurrentView('delivery');
+    else setCurrentView('home');
   };
 
   const handleLogout = () => {
@@ -211,6 +227,8 @@ const App: React.FC = () => {
   const updateOrderStatus = useCallback(async (orderId: string, status: Order['status'], note?: string) => {
     const now = new Date();
     const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    // Always fetch freshest data from state to prevent history loss
     const orderToUpdate = allOrders.find(o => o.id === orderId);
     if (!orderToUpdate) return;
 
@@ -220,13 +238,16 @@ const App: React.FC = () => {
       note: note || `Status updated to ${status}`
     };
 
-    const updatedData = {
+    const updatedOrder = {
+      ...orderToUpdate,
       status,
       history: [...orderToUpdate.history, historyEntry]
     };
 
-    await updateDocument(COLLECTIONS.ORDERS, orderId, updatedData);
-    await syncOrderToSupabase({ ...orderToUpdate, ...updatedData });
+    // Update locally first for instant UI feel
+    await upsertDocument(COLLECTIONS.ORDERS, orderId, updatedOrder);
+    // Push to cloud - this triggers the Realtime listener on other devices
+    await syncOrderToSupabase(updatedOrder);
 
     addNotification(`Order ${status}!`, `Order ${orderId} is now ${status.toLowerCase()}.`, 'system', false, orderToUpdate.userMobile);
   }, [allOrders, addNotification]);
@@ -237,20 +258,24 @@ const App: React.FC = () => {
 
     const staff = registeredUsers.find(u => String(u.mobile || u.email) === String(staffMobile));
     const assignmentData = {
+      ...orderToUpdate,
       assignedToMobile: staffMobile ? String(staffMobile) : null, 
       assignedToName: staff?.name || null
     };
 
-    await updateDocument(COLLECTIONS.ORDERS, orderId, assignmentData);
-    await syncOrderToSupabase({ ...orderToUpdate, ...assignmentData });
+    await upsertDocument(COLLECTIONS.ORDERS, orderId, assignmentData);
+    await syncOrderToSupabase(assignmentData);
 
     if (staffMobile) addNotification('New Task', `Order ${orderId} assigned to you.`, 'system', false, String(staffMobile));
   }, [registeredUsers, allOrders, addNotification]);
 
   const updateStaffRole = async (id: string, isDelivery: boolean) => {
-    await updateDocument(COLLECTIONS.USERS, String(id), { isDeliveryBoy: isDelivery });
     const u = registeredUsers.find(user => (user.mobile || user.email) === id);
-    if (u) syncUserToSupabase({ ...u, isDeliveryBoy: isDelivery });
+    if (u) {
+      const updated = { ...u, isDeliveryBoy: isDelivery };
+      await upsertDocument(COLLECTIONS.USERS, String(id), updated);
+      await syncUserToSupabase(updated);
+    }
   };
 
   const updateAdminRole = async (id: string, isAdmin: boolean) => {
@@ -258,9 +283,12 @@ const App: React.FC = () => {
       alert("Primary admin cannot be demoted.");
       return;
     }
-    await updateDocument(COLLECTIONS.USERS, String(id), { isAdmin });
     const u = registeredUsers.find(user => (user.mobile || user.email) === id);
-    if (u) syncUserToSupabase({ ...u, isAdmin });
+    if (u) {
+      const updated = { ...u, isAdmin };
+      await upsertDocument(COLLECTIONS.USERS, String(id), updated);
+      await syncUserToSupabase(updated);
+    }
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -271,18 +299,9 @@ const App: React.FC = () => {
 
   const toggleDarkMode = () => setIsDarkMode(prev => !prev);
 
-  if (appLoading) {
-    return <SplashScreen />;
-  }
+  if (appLoading) return <SplashScreen />;
 
-  if (!user) {
-    return (
-      <Login 
-        onLogin={handleLogin} 
-        registeredUsers={registeredUsers} 
-      />
-    );
-  }
+  if (!user) return <Login onLogin={handleLogin} registeredUsers={registeredUsers} />;
 
   const userOrders = allOrders.filter(o => String(o.userMobile) === String(user.mobile || user.email));
   const relevantNotifications = notifications.filter(n => (n.forAdmin && user.isAdmin) || (!n.forAdmin && String(n.userMobile) === String(user.mobile || user.email)));
@@ -321,7 +340,7 @@ const App: React.FC = () => {
         {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
         {currentView === 'orders' && <Orders orders={userOrders} />}
         {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
-        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile || user.email))} onUpdateStatus={updateOrderStatus} user={user} isLive={!!townId} />}
+        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile || user.email))} onUpdateStatus={updateOrderStatus} user={user} isLive={true} />}
         {currentView === 'admin' && (
           <Admin 
             products={products} 
