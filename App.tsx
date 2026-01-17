@@ -160,7 +160,14 @@ const App: React.FC = () => {
     // Sync to Supabase cloud
     await syncUserToSupabase(newUser);
     
-    setCurrentView('home');
+    // Role-based redirection
+    if (isAdmin) {
+      setCurrentView('admin');
+    } else if (isDeliveryBoy) {
+      setCurrentView('delivery');
+    } else {
+      setCurrentView('home');
+    }
   };
 
   const handleLogout = () => {
