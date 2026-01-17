@@ -29,6 +29,12 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
     setTimeout(() => setIsUpdating(null), 300);
   };
 
+  const handleRemove = (id: string) => {
+    // Add a simple exit effect by marking it, then calling parent remove
+    setIsUpdating(id);
+    setTimeout(() => onRemove(id), 200);
+  };
+
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-4 animate-in fade-in duration-500">
@@ -43,27 +49,32 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
 
   return (
     <div className="space-y-6 pb-10">
-      <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100 px-1">Review Items</h2>
+      <div className="flex justify-between items-center px-1">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100">Review Items</h2>
+        <span className="text-[10px] font-black bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-lg uppercase tracking-wider">
+          {items.length} {items.length === 1 ? 'Item' : 'Items'}
+        </span>
+      </div>
       
       <div className="space-y-4">
         {items.map((item, index) => (
           <div 
             key={item.product.id} 
             style={{ animationDelay: `${index * 50}ms` }}
-            className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 flex gap-4 animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both"
+            className={`bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 flex gap-4 animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both transition-all ${isUpdating === item.product.id ? 'scale-[0.98] opacity-50' : ''}`}
           >
-            <div className="relative overflow-hidden rounded-lg shrink-0">
+            <div className="relative overflow-hidden rounded-xl shrink-0">
                <img src={item.product.image} className="h-20 w-20 object-cover" alt="" />
             </div>
             <div className="flex-1 flex flex-col justify-between">
               <div className="flex justify-between">
-                <div>
+                <div className="text-left">
                   <h3 className="font-bold text-gray-800 dark:text-slate-100 text-sm">{item.product.name}</h3>
                   <p className="text-xs text-gray-500 dark:text-slate-400">₹{item.product.price} / {item.product.unit}</p>
                 </div>
                 <button 
-                  onClick={() => onRemove(item.product.id)} 
-                  className="text-red-400 hover:text-red-600 p-2 transition-transform active:scale-125"
+                  onClick={() => handleRemove(item.product.id)} 
+                  className="text-gray-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 p-2 transition-colors active:scale-125"
                 >
                   <i className="fas fa-trash-can text-sm"></i>
                 </button>
@@ -73,7 +84,7 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
                 <div className="flex items-center gap-3 bg-gray-50 dark:bg-slate-900 rounded-lg px-2 py-1 border border-gray-100 dark:border-slate-800">
                   <button 
                     onClick={() => handleUpdate(item.product.id, -1)}
-                    className="h-6 w-6 rounded-md bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 flex items-center justify-center text-gray-600 dark:text-slate-300 active:bg-gray-100 dark:active:bg-slate-700 transition-all"
+                    className="h-6 w-6 rounded-md bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 flex items-center justify-center text-gray-600 dark:text-slate-300 active:bg-gray-100 dark:active:bg-slate-700 transition-all shadow-sm"
                   >
                     <i className="fas fa-minus text-[10px]"></i>
                   </button>
@@ -82,7 +93,7 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
                   </span>
                   <button 
                     onClick={() => handleUpdate(item.product.id, 1)}
-                    className="h-6 w-6 rounded-md bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 flex items-center justify-center text-gray-600 dark:text-slate-300 active:bg-gray-100 dark:active:bg-slate-700 transition-all"
+                    className="h-6 w-6 rounded-md bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 flex items-center justify-center text-gray-600 dark:text-slate-300 active:bg-gray-100 dark:active:bg-slate-700 transition-all shadow-sm"
                   >
                     <i className="fas fa-plus text-[10px]"></i>
                   </button>
@@ -96,37 +107,37 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
         ))}
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] shadow-xl border-2 border-blue-50 dark:border-blue-900/30 space-y-6 relative overflow-hidden transition-all">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-slate-700 space-y-6 relative overflow-hidden transition-all">
         {/* Subtle Decorative Background */}
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-blue-50/50 to-transparent dark:from-blue-900/5 pointer-events-none"></div>
+        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-900/5 pointer-events-none"></div>
 
-        <div className="relative z-10">
-          <h3 className="text-xs font-bold text-gray-500 dark:text-slate-400 mb-4 flex items-center gap-2 uppercase tracking-widest">
+        <div className="relative z-10 text-left">
+          <h3 className="text-[10px] font-bold text-gray-400 dark:text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-[0.2em]">
             <i className="fas fa-credit-card text-blue-500"></i>
-            Payment Mode
+            Payment Method
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setPaymentMethod('COD')}
-              className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${
+              className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all duration-300 ${
                 paymentMethod === 'COD' 
                   ? 'border-blue-600 bg-blue-600 text-white shadow-lg scale-[1.02]' 
                   : 'border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-600'
               }`}
             >
               <i className="fas fa-truck-fast mb-2 text-xl"></i>
-              <span className="text-[10px] font-bold uppercase tracking-wider">COD</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">Cash on Delivery</span>
             </button>
             <button
               onClick={() => setPaymentMethod('UPI/Online')}
-              className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${
+              className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all duration-300 ${
                 paymentMethod === 'UPI/Online' 
                   ? 'border-blue-600 bg-blue-600 text-white shadow-lg scale-[1.02]' 
                   : 'border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-600'
               }`}
             >
               <i className="fas fa-qrcode mb-2 text-xl"></i>
-              <span className="text-[10px] font-bold uppercase tracking-wider">UPI</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">UPI / Online</span>
             </button>
           </div>
         </div>
@@ -140,40 +151,54 @@ const Cart: React.FC<CartProps> = ({ items, onUpdate, onRemove, onPlaceOrder, de
               </div>
               <div className="space-y-1">
                 <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">ID: {DEFAULT_UPI_ID}</p>
-                <p className="text-[9px] text-gray-400 dark:text-slate-500 italic">Share screenshot on WhatsApp</p>
+                <p className="text-[9px] text-gray-400 dark:text-slate-500 italic">Fast & Secure Payments</p>
               </div>
             </div>
           </div>
         )}
 
-        <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-slate-700 relative z-10">
+        <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-slate-700 relative z-10 text-left">
           <div className="space-y-2">
             <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400 font-medium">
-              <span>Subtotal</span>
+              <span>Items Total</span>
               <span className="dark:text-slate-200">₹{subtotal}</span>
             </div>
             <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400 font-medium">
-              <span>Delivery Fee</span>
-              <span className="dark:text-slate-200">₹{deliveryFee}</span>
+              <span>Delivery Charges</span>
+              <span className="text-green-600 dark:text-green-400 font-bold">₹{deliveryFee}</span>
             </div>
           </div>
           
-          <div className="bg-blue-600 dark:bg-blue-500/10 p-5 rounded-2xl flex justify-between items-center transition-all shadow-inner">
-            <span className="font-bold text-white dark:text-blue-400 text-sm">Total Payable</span>
-            <div className="text-right">
-              <span className="text-2xl font-black text-white dark:text-blue-300 block">₹{total}</span>
-              <span className="text-[8px] text-blue-100 dark:text-blue-500 font-bold uppercase tracking-widest">All taxes included</span>
-            </div>
+          <div className="relative group">
+             {/* Glowing border effect for total section */}
+             <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+             
+             <div className="relative bg-gradient-to-br from-blue-600 to-blue-700 dark:from-slate-900 dark:to-slate-950 p-5 rounded-[1.5rem] flex justify-between items-center transition-all shadow-xl overflow-hidden border border-white/10 dark:border-blue-500/20">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/10 rounded-full -ml-12 -mb-12 blur-2xl"></div>
+                
+                <div className="z-10">
+                  <span className="font-bold text-blue-100 dark:text-blue-400 text-xs uppercase tracking-widest">Total Payable</span>
+                  <p className="text-[8px] text-blue-200/60 dark:text-slate-500 font-bold uppercase mt-1">Inclusive of all taxes</p>
+                </div>
+                
+                <div className="text-right z-10">
+                  <div key={total} className="animate-in zoom-in-95 duration-200 flex items-center justify-end gap-1">
+                    <span className="text-sm font-bold text-white/70">₹</span>
+                    <span className="text-3xl font-black text-white dark:text-blue-300">{total}</span>
+                  </div>
+                </div>
+             </div>
           </div>
         </div>
         
         <button
           onClick={() => onPlaceOrder(paymentMethod)}
-          className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white py-5 rounded-2xl font-bold shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3 relative z-10 overflow-hidden"
+          className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-200 dark:shadow-none transition-all active:scale-[0.97] flex items-center justify-center gap-3 relative z-10 overflow-hidden"
         >
           <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity"></div>
-          {paymentMethod === 'COD' ? <i className="fas fa-check-circle"></i> : <i className="fas fa-paper-plane"></i>}
-          Place Order
+          <i className={paymentMethod === 'COD' ? "fas fa-check-circle" : "fas fa-shield-check"}></i>
+          {paymentMethod === 'COD' ? 'Confirm Order' : 'Pay & Order'}
         </button>
       </div>
     </div>

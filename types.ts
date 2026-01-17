@@ -15,7 +15,9 @@ export interface CartItem {
 }
 
 export interface User {
-  mobile: string;
+  mobile?: string;
+  email?: string;
+  pin?: string;
   name: string;
   address: string;
   pincode: string;

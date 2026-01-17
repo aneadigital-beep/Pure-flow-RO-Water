@@ -31,7 +31,7 @@ const App: React.FC = () => {
   });
 
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [deliveryFee, setDeliveryFee] = useState<number>(DEFAULT_DELIVERY_FEE);
@@ -51,6 +51,8 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   useEffect(() => {
+    const timer = setTimeout(() => setAppLoading(false), 2000);
+
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
       setAllOrders(data as Order[]);
       setAppLoading(false);
@@ -61,10 +63,9 @@ const App: React.FC = () => {
     });
 
     const unsubProducts = syncCollection(COLLECTIONS.PRODUCTS, (data) => {
-      if (data.length > 0) {
+      if (data && data.length > 0) {
         setProducts(data as Product[]);
       } else {
-        // Seed initial products if database is empty
         INITIAL_PRODUCTS.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
       }
     });
@@ -75,6 +76,7 @@ const App: React.FC = () => {
     });
 
     return () => {
+      clearTimeout(timer);
       unsubOrders();
       unsubUsers();
       unsubProducts();
@@ -100,35 +102,36 @@ const App: React.FC = () => {
     };
     setNotifications(prev => [newNotif, ...prev]);
     if (user) {
-      if ((forAdmin && user.isAdmin) || (!forAdmin && String(user.mobile) === String(userMobile))) {
+      if ((forAdmin && user.isAdmin) || (!forAdmin && String(user.mobile || user.email) === String(userMobile))) {
         setActiveToast({ title, message });
       }
     }
   }, [user]);
 
-  const handleLogin = async (mobile: string, name: string, address: string, pincode: string, avatar?: string) => {
-    const ADMIN_MOBILE = '9999999999';
-    const existingCloudUser = await getDocument(COLLECTIONS.USERS, String(mobile)) as any;
-    const isAdmin = mobile === ADMIN_MOBILE || existingCloudUser?.isAdmin; 
+  const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; avatar?: string; pin?: string }) => {
+    const ADMIN_ID = '9999999999';
+    const id = creds.mobile || creds.email || 'guest';
+    const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
+    
+    const isAdmin = creds.mobile === ADMIN_ID || creds.email?.includes('admin@pureflow.com') || existingCloudUser?.isAdmin; 
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy;
 
     const newUser: User = { 
-      mobile: String(mobile), 
-      name: name || existingCloudUser?.name || 'User', 
-      address: address || existingCloudUser?.address || '', 
-      pincode: pincode || existingCloudUser?.pincode || '', 
-      avatar: avatar || existingCloudUser?.avatar, 
+      mobile: creds.mobile,
+      email: creds.email,
+      pin: creds.pin,
+      name: creds.name || existingCloudUser?.name || 'User', 
+      address: creds.address || existingCloudUser?.address || '', 
+      pincode: creds.pincode || existingCloudUser?.pincode || '', 
+      avatar: creds.avatar || existingCloudUser?.avatar, 
       isLoggedIn: true, 
       isAdmin, 
       isDeliveryBoy 
     };
     
     setUser(newUser);
-    await upsertDocument(COLLECTIONS.USERS, String(mobile), newUser);
-
-    if (isDeliveryBoy) setCurrentView('delivery');
-    else if (isAdmin) setCurrentView('admin');
-    else setCurrentView('home');
+    await upsertDocument(COLLECTIONS.USERS, id, newUser);
+    setCurrentView('home');
   };
 
   const handleLogout = () => {
@@ -146,7 +149,7 @@ const App: React.FC = () => {
     
     const newOrder: Order = {
       id: orderId,
-      userMobile: String(user.mobile),
+      userMobile: String(user.mobile || user.email),
       userName: user.name,
       userAddress: `${user.address}, ${user.pincode}`,
       date: now.toLocaleDateString(),
@@ -185,7 +188,7 @@ const App: React.FC = () => {
   }, [allOrders, addNotification]);
 
   const assignOrder = useCallback(async (orderId: string, staffMobile: string | undefined) => {
-    const staff = registeredUsers.find(u => String(u.mobile) === String(staffMobile));
+    const staff = registeredUsers.find(u => String(u.mobile || u.email) === String(staffMobile));
     await updateDocument(COLLECTIONS.ORDERS, orderId, {
       assignedToMobile: staffMobile ? String(staffMobile) : null, 
       assignedToName: staff?.name || null
@@ -193,16 +196,16 @@ const App: React.FC = () => {
     if (staffMobile) addNotification('New Task', `Order ${orderId} assigned to you.`, 'system', false, String(staffMobile));
   }, [registeredUsers, addNotification]);
 
-  const updateStaffRole = async (mobile: string, isDelivery: boolean) => {
-    await updateDocument(COLLECTIONS.USERS, String(mobile), { isDeliveryBoy: isDelivery });
+  const updateStaffRole = async (id: string, isDelivery: boolean) => {
+    await updateDocument(COLLECTIONS.USERS, String(id), { isDeliveryBoy: isDelivery });
   };
 
-  const updateAdminRole = async (mobile: string, isAdmin: boolean) => {
-    if (mobile === '9999999999' && !isAdmin) {
+  const updateAdminRole = async (id: string, isAdmin: boolean) => {
+    if (id === '9999999999' && !isAdmin) {
       alert("Primary admin cannot be demoted.");
       return;
     }
-    await updateDocument(COLLECTIONS.USERS, String(mobile), { isAdmin });
+    await updateDocument(COLLECTIONS.USERS, String(id), { isAdmin });
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -227,19 +230,16 @@ const App: React.FC = () => {
       <Login 
         onLogin={handleLogin} 
         registeredUsers={registeredUsers} 
-        onImportData={(d) => {}} 
-        onSetTownId={setTownId}
-        currentTownId={townId}
       />
     );
   }
 
-  const userOrders = allOrders.filter(o => String(o.userMobile) === String(user.mobile));
-  const relevantNotifications = notifications.filter(n => (n.forAdmin && user.isAdmin) || (!n.forAdmin && String(n.userMobile) === String(user.mobile)));
+  const userOrders = allOrders.filter(o => String(o.userMobile) === String(user.mobile || user.email));
+  const relevantNotifications = notifications.filter(n => (n.forAdmin && user.isAdmin) || (!n.forAdmin && String(n.userMobile) === String(user.mobile || user.email)));
   const unreadCount = relevantNotifications.filter(n => !n.isRead).length;
 
   return (
-    <div className={`flex flex-col min-h-screen transition-colors duration-300 bg-slate-50 dark:bg-slate-900 ${['admin', 'delivery', 'assistant'].includes(currentView) ? '' : 'pb-20'}`}>
+    <div className={`flex flex-col min-h-screen transition-colors duration-300 bg-slate-50 dark:bg-slate-900 pb-20`}>
       {activeToast && <Toast title={activeToast.title} message={activeToast.message} onClose={() => setActiveToast(null)} />}
       
       <header className={`text-white p-4 shadow-md sticky top-0 z-50 ${user.isDeliveryBoy ? 'bg-green-600 dark:bg-green-800' : 'bg-blue-600 dark:bg-blue-800'}`}>
@@ -249,10 +249,6 @@ const App: React.FC = () => {
               <i className="fas fa-droplet text-blue-200"></i>
               {TOWN_NAME}
             </h1>
-            <div 
-              className={`h-2.5 w-2.5 rounded-full border border-white/20 ${townId ? 'bg-green-400' : 'bg-gray-400 opacity-40'}`} 
-              title={townId ? `Live Sync Active (${townId})` : "Local Mode (Offline)"}
-            ></div>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={toggleDarkMode} className="p-2 rounded-full hover:bg-white/10 transition-colors">
@@ -275,7 +271,7 @@ const App: React.FC = () => {
         {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
         {currentView === 'orders' && <Orders orders={userOrders} />}
         {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
-        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile))} onUpdateStatus={updateOrderStatus} user={user} isLive={!!townId} />}
+        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile || user.email))} onUpdateStatus={updateOrderStatus} user={user} isLive={!!townId} />}
         {currentView === 'admin' && (
           <Admin 
             products={products} 
@@ -287,7 +283,7 @@ const App: React.FC = () => {
             onUpdateDeliveryFee={(fee) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: fee })} 
             registeredUsers={registeredUsers} notifications={notifications} onImportData={(d) => {}}
             onAssignOrder={assignOrder} 
-            onAddStaff={(mobile, name) => upsertDocument(COLLECTIONS.USERS, mobile, { mobile, name, isDeliveryBoy: true, address: 'Staff' })} 
+            onAddStaff={(id, name) => upsertDocument(COLLECTIONS.USERS, id, { id, mobile: id, name, isDeliveryBoy: true, address: 'Staff' })} 
             onUpdateStaffRole={updateStaffRole}
             onUpdateAdminRole={updateAdminRole}
             townId={townId}
@@ -297,14 +293,18 @@ const App: React.FC = () => {
         {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
       </main>
 
-      {!user.isDeliveryBoy && currentView !== 'assistant' && (
-        <button onClick={() => setCurrentView('assistant')} className={`fixed ${['admin', 'delivery', 'assistant'].includes(currentView) ? 'bottom-6' : 'bottom-24'} right-6 h-14 w-14 bg-blue-600 dark:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center z-40 transition-transform active:scale-95`}>
+      {currentView !== 'assistant' && (
+        <button onClick={() => setCurrentView('assistant')} className="fixed bottom-24 right-6 h-14 w-14 bg-blue-600 dark:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center z-40 transition-transform active:scale-95">
           <i className="fas fa-robot text-xl"></i>
         </button>
       )}
 
-      {!['admin', 'delivery', 'assistant'].includes(currentView) && (
-        <Navbar currentView={currentView} onViewChange={setCurrentView} cartCount={cart.reduce((a, b) => a + b.quantity, 0)} />
+      {currentView !== 'assistant' && (
+        <Navbar 
+          currentView={['admin', 'delivery'].includes(currentView) ? 'profile' : currentView} 
+          onViewChange={setCurrentView} 
+          cartCount={cart.reduce((a, b) => a + b.quantity, 0)} 
+        />
       )}
     </div>
   );
