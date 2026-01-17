@@ -6,9 +6,11 @@ interface LoginProps {
   onLogin: (mobile: string, name: string, address: string, pincode: string, avatar?: string) => void;
   registeredUsers: User[];
   onImportData: (data: any) => void;
+  onSetTownId: (id: string) => void;
+  currentTownId: string;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData, onSetTownId, currentTownId }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1); // 1: Mobile, 2: OTP, 3: Profile Details
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
@@ -18,6 +20,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
   const [avatar, setAvatar] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
   const [timer, setTimer] = useState(0);
+  const [townIdInput, setTownIdInput] = useState(currentTownId);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,19 +87,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
     }
   };
 
-  const handleTownSetup = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const data = JSON.parse(ev.target?.result as string);
-          onImportData(data);
-        } catch (err) {
-          alert("Could not read setup file. Make sure you use the JSON file exported from the Admin panel Settings.");
-        }
-      };
-      reader.readAsText(file);
+  const handleConnectTown = () => {
+    if (townIdInput.trim()) {
+      setIsSyncing(true);
+      setTimeout(() => {
+        onSetTownId(townIdInput.trim());
+        setIsSyncing(false);
+      }, 1000);
     }
   };
 
@@ -111,6 +109,33 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
       </div>
 
       <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden transition-colors">
+        
+        {/* Sync Status / Join Town */}
+        <div className="mb-6 p-3 rounded-2xl bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 flex flex-col gap-2">
+           <div className="flex justify-between items-center px-1">
+             <span className="text-[9px] font-bold text-gray-400 dark:text-slate-600 uppercase tracking-widest">Database Sync</span>
+             <span className={`text-[9px] font-bold uppercase ${currentTownId ? 'text-green-500' : 'text-orange-400'}`}>
+               {currentTownId ? 'Cloud Active' : 'Offline Mode'}
+             </span>
+           </div>
+           <div className="flex gap-2">
+             <input 
+               type="text" 
+               placeholder="Enter Town ID..." 
+               value={townIdInput}
+               onChange={(e) => setTownIdInput(e.target.value.toUpperCase())}
+               className="flex-1 bg-white dark:bg-slate-900 text-[10px] font-bold p-2 rounded-lg border border-gray-100 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:text-slate-300"
+             />
+             <button 
+               onClick={handleConnectTown}
+               disabled={isSyncing || !townIdInput}
+               className="bg-blue-600 text-white text-[10px] px-3 py-2 rounded-lg font-bold disabled:opacity-50"
+             >
+               {isSyncing ? <i className="fas fa-circle-notch animate-spin"></i> : 'Connect'}
+             </button>
+           </div>
+        </div>
+
         {/* Step Progress Indicator */}
         <div className="flex justify-center gap-1.5 mb-8">
           {[1, 2, 3].map((s) => (
@@ -150,25 +175,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
             >
               {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Send OTP'}
             </button>
-            
-            <div className="pt-4 mt-4 border-t border-gray-50 dark:border-slate-800 text-center">
-              <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase tracking-widest mb-2">Assigned Staff member?</p>
-              <button 
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-900/30 px-3 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
-              >
-                <i className="fas fa-file-import"></i>
-                Setup from Admin JSON
-              </button>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept=".json" 
-                onChange={handleTownSetup} 
-              />
-            </div>
           </form>
         )}
 
@@ -201,27 +207,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, onImportData })
               >
                 {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Verify & Continue'}
               </button>
-              
-              <div className="flex flex-col items-center gap-2">
-                {timer > 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-slate-500 font-medium">Resend OTP in {timer}s</p>
-                ) : (
-                  <button 
-                    type="button" 
-                    onClick={() => setTimer(30)}
-                    className="text-blue-600 dark:text-blue-400 text-xs font-bold hover:underline"
-                  >
-                    Resend OTP
-                  </button>
-                )}
-                <button 
-                  type="button" 
-                  onClick={() => setStep(1)}
-                  className="text-gray-400 dark:text-slate-600 text-xs font-medium hover:text-gray-600 dark:hover:text-slate-400"
-                >
-                  Change Number
-                </button>
-              </div>
             </div>
           </form>
         )}

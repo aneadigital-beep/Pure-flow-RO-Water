@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE } from './constants';
-import { db, COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy } from './firebase';
+import { COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy, getTownId, setTownId } from './firebase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Cart from './components/Cart';
@@ -31,7 +31,7 @@ const App: React.FC = () => {
   });
 
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [deliveryFee, setDeliveryFee] = useState<number>(DEFAULT_DELIVERY_FEE);
@@ -39,6 +39,7 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeToast, setActiveToast] = useState<{title: string, message: string} | null>(null);
   const [appLoading, setAppLoading] = useState(true);
+  const [townId, setInternalTownId] = useState(getTownId());
 
   useEffect(() => {
     if (isDarkMode) {
@@ -50,7 +51,6 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   useEffect(() => {
-    // Sync collections using our new local persistence engine
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
       setAllOrders(data as Order[]);
       setAppLoading(false);
@@ -61,7 +61,12 @@ const App: React.FC = () => {
     });
 
     const unsubProducts = syncCollection(COLLECTIONS.PRODUCTS, (data) => {
-      if (data.length > 0) setProducts(data as Product[]);
+      if (data.length > 0) {
+        setProducts(data as Product[]);
+      } else {
+        // Seed initial products if database is empty
+        INITIAL_PRODUCTS.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
+      }
     });
 
     const unsubSettings = syncCollection(COLLECTIONS.SETTINGS, (data) => {
@@ -109,10 +114,10 @@ const App: React.FC = () => {
 
     const newUser: User = { 
       mobile: String(mobile), 
-      name: existingCloudUser?.name || name, 
-      address: existingCloudUser?.address || address, 
-      pincode: existingCloudUser?.pincode || pincode, 
-      avatar: existingCloudUser?.avatar || avatar, 
+      name: name || existingCloudUser?.name || 'User', 
+      address: address || existingCloudUser?.address || '', 
+      pincode: pincode || existingCloudUser?.pincode || '', 
+      avatar: avatar || existingCloudUser?.avatar, 
       isLoggedIn: true, 
       isAdmin, 
       isDeliveryBoy 
@@ -218,7 +223,15 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-    return <Login onLogin={handleLogin} registeredUsers={registeredUsers} onImportData={(d) => {}} />;
+    return (
+      <Login 
+        onLogin={handleLogin} 
+        registeredUsers={registeredUsers} 
+        onImportData={(d) => {}} 
+        onSetTownId={setTownId}
+        currentTownId={townId}
+      />
+    );
   }
 
   const userOrders = allOrders.filter(o => String(o.userMobile) === String(user.mobile));
@@ -237,8 +250,8 @@ const App: React.FC = () => {
               {TOWN_NAME}
             </h1>
             <div 
-              className="h-2.5 w-2.5 rounded-full border border-white/20 bg-green-400" 
-              title="Local Persistence Active"
+              className={`h-2.5 w-2.5 rounded-full border border-white/20 ${townId ? 'bg-green-400' : 'bg-gray-400 opacity-40'}`} 
+              title={townId ? `Live Sync Active (${townId})` : "Local Mode (Offline)"}
             ></div>
           </div>
           <div className="flex items-center gap-2">
@@ -262,7 +275,7 @@ const App: React.FC = () => {
         {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
         {currentView === 'orders' && <Orders orders={userOrders} />}
         {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
-        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile))} onUpdateStatus={updateOrderStatus} user={user} isLive={true} />}
+        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => String(o.assignedToMobile) === String(user.mobile))} onUpdateStatus={updateOrderStatus} user={user} isLive={!!townId} />}
         {currentView === 'admin' && (
           <Admin 
             products={products} 
@@ -277,6 +290,8 @@ const App: React.FC = () => {
             onAddStaff={(mobile, name) => upsertDocument(COLLECTIONS.USERS, mobile, { mobile, name, isDeliveryBoy: true, address: 'Staff' })} 
             onUpdateStaffRole={updateStaffRole}
             onUpdateAdminRole={updateAdminRole}
+            townId={townId}
+            onSetTownId={setTownId}
           />
         )}
         {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}

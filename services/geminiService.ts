@@ -1,46 +1,59 @@
 
-// Implement the Gemini service using the @google/genai SDK.
 import { GoogleGenAI } from "@google/genai";
 
+export interface AIResponse {
+  text: string;
+  sources: { title: string; uri: string }[];
+}
+
 /**
- * Service to interact with Gemini API for water-related advice and customer support.
- * @param prompt The user's question or message.
- * @returns A promise that resolves to the AI-generated string response.
+ * Service to interact with Gemini API with Google Cloud Search Grounding.
  */
-export const getWaterAdvice = async (prompt: string): Promise<string> => {
+export const getWaterAdvice = async (prompt: string): Promise<AIResponse> => {
   try {
-    // Always initialize the client with the API key from process.env.API_KEY.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Using gemini-3-flash-preview for efficient text-based conversational tasks.
+    // Using gemini-3-flash-preview for efficiency + Google Search capabilities
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
+        tools: [{ googleSearch: {} }],
         systemInstruction: `
-          You are the "Township PureFlow Assistant", a helpful AI customer support representative for an RO water delivery service.
-          
-          Our Business (Township PureFlow):
-          - We deliver premium 20L RO purified water cans.
-          - Single 20L Can: ₹35.
-          - Weekly Subscription: ₹250 per month (2 cans delivered every week).
-          - Daily Family Plan: ₹900 per month (1 can delivered daily).
-          - Manual Hand Pump: ₹150 (food-grade).
-          - Automatic Dispenser: ₹450 (rechargeable).
+          You are the "Township PureFlow Assistant", a helpful AI powered by Google Cloud.
           
           Guidelines:
-          - Provide hydration tips and benefits of RO water.
-          - Answer questions about our delivery plans and pricing.
-          - Keep responses professional, friendly, and very concise (maximum 3 sentences).
-          - If asked about non-water topics, politely stay on the subject of water and health.
+          - Use Google Search to provide up-to-date facts about water quality, health standards, and local weather/news if relevant.
+          - Answer questions about RO water, delivery plans (Can: ₹35, Sub: ₹250/mo), and pricing.
+          - Keep responses concise (max 3 sentences).
+          - ALWAYS be accurate about scientific water standards.
         `,
       },
     });
 
-    // Directly access the .text property from the GenerateContentResponse.
-    return response.text || "I'm sorry, I couldn't generate a response. Please try again later.";
+    const text = response.text || "I couldn't process that. Please try again.";
+    
+    // Extract grounding chunks (the "Cloud" sources)
+    const sources: { title: string; uri: string }[] = [];
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    
+    if (chunks) {
+      chunks.forEach((chunk: any) => {
+        if (chunk.web) {
+          sources.push({
+            title: chunk.web.title,
+            uri: chunk.web.uri
+          });
+        }
+      });
+    }
+
+    return { text, sources };
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Oops! I'm having a bit of trouble connecting to my water wisdom right now. Please try again in a moment.";
+    return { 
+      text: "I'm having a bit of trouble connecting to my cloud knowledge. Please check your internet.", 
+      sources: [] 
+    };
   }
 };
