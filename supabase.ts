@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://qurooscttpenkrzmfowd.supabase.co';
@@ -7,10 +8,13 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /**
  * Syncs an order to Supabase.
+ * Note: Ensure "depositAmount" column exists in your orders table via Supabase SQL Editor:
+ * ALTER TABLE orders ADD COLUMN "depositAmount" NUMERIC DEFAULT 0;
  */
 export const syncOrderToSupabase = async (order: any) => {
   try {
-    // Remove local-only properties like lastUpdated that are not in the Supabase schema
+    // We only exclude 'lastUpdated' as it's a local-only tracking field
+    // 'depositAmount' is now included in 'cleanOrder'
     const { lastUpdated, ...cleanOrder } = order;
     
     const { error } = await supabase
