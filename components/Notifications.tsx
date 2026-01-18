@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppNotification } from '../types';
-import { getWaterAdvice } from '../services/geminiService';
+import { getWaterAdvice, AIResponse } from '../services/geminiService';
 
 interface NotificationsProps {
   notifications: AppNotification[];
@@ -11,7 +11,8 @@ interface NotificationsProps {
 }
 
 const Notifications: React.FC<NotificationsProps> = ({ notifications, onMarkRead, onClear, onBack }) => {
-  const [summary, setSummary] = useState<string | null>(null);
+  // Fix: change state type to AIResponse | null to match getWaterAdvice return type
+  const [summary, setSummary] = useState<AIResponse | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ const Notifications: React.FC<NotificationsProps> = ({ notifications, onMarkRead
     const notifText = notifications.map(n => `${n.timestamp}: ${n.title} - ${n.message}`).join('\n');
     const prompt = `Please summarize these app notifications for me in 2 short, friendly sentences: \n${notifText}`;
     
+    // Fix: line 31 was failing because aiSummary (AIResponse) was assigned to summary (string)
     const aiSummary = await getWaterAdvice(prompt);
     setSummary(aiSummary);
     setIsSummarizing(false);
@@ -92,9 +94,32 @@ const Notifications: React.FC<NotificationsProps> = ({ notifications, onMarkRead
           <button onClick={() => setSummary(null)} className="absolute top-3 right-3 text-blue-300 dark:text-blue-700 hover:text-blue-500">
             <i className="fas fa-times-circle"></i>
           </button>
-          <div className="flex gap-3">
-             <i className="fas fa-robot text-blue-600 dark:text-blue-400 mt-1"></i>
-             <p className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed font-medium italic">"{summary}"</p>
+          <div className="flex flex-col gap-3">
+             <div className="flex gap-3">
+                <i className="fas fa-robot text-blue-600 dark:text-blue-400 mt-1"></i>
+                {/* Fix: accessing text property of summary object instead of entire object */}
+                <p className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed font-medium italic">"{summary.text}"</p>
+             </div>
+
+             {/* Fix: Render grounding sources to comply with Search Grounding requirements */}
+             {summary.sources && summary.sources.length > 0 && (
+               <div className="mt-2 pt-2 border-t border-blue-100/50 dark:border-blue-900/30">
+                 <p className="text-[9px] font-bold text-blue-400 dark:text-blue-500 uppercase mb-1">Grounding Sources</p>
+                 <div className="flex flex-wrap gap-1">
+                   {summary.sources.map((source, idx) => (
+                     <a 
+                       key={idx} 
+                       href={source.uri} 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       className="text-[10px] bg-white/50 dark:bg-blue-800/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full hover:underline line-clamp-1"
+                     >
+                       <i className="fas fa-link mr-1"></i> {source.title}
+                     </a>
+                   ))}
+                 </div>
+               </div>
+             )}
           </div>
         </div>
       )}

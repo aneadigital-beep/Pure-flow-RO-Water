@@ -4,7 +4,18 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://qurooscttpenkrzmfowd.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_DpKCUICMcnUJ32NW1lM7Kw_xzFif5wz';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+/**
+ * Initialize Supabase client with specialized options for sandboxed environments.
+ * Disabling persistSession prevents "Failed to fetch" or "Access Denied" errors 
+ * related to localStorage/indexedDB in some browser security contexts.
+ */
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false
+  }
+});
 
 /**
  * RECOMMENDED SQL SCHEMA FOR SUPABASE:
@@ -23,9 +34,22 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
  *   "paymentMethod" TEXT,
  *   "assignedToMobile" TEXT,
  *   "assignedToName" TEXT,
- *   "depositAmount" NUMERIC DEFAULT 0,
- *   items JSONB,    -- Use JSONB for these two
- *   history JSONB   -- Use JSONB for these two
+ *   items JSONB,
+ *   history JSONB
+ * );
+ * 
+ * CREATE TABLE users (
+ *   id TEXT PRIMARY KEY,
+ *   name TEXT,
+ *   mobile TEXT,
+ *   email TEXT,
+ *   address TEXT,
+ *   pincode TEXT,
+ *   avatar TEXT,
+ *   pin TEXT,
+ *   "isAdmin" BOOLEAN DEFAULT FALSE,
+ *   "isDeliveryBoy" BOOLEAN DEFAULT FALSE,
+ *   "lastUpdated" TIMESTAMPTZ DEFAULT NOW()
  * );
  */
 
@@ -34,47 +58,26 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
  */
 export const syncOrderToSupabase = async (order: any) => {
   try {
-    // 1. Exclude local-only UI fields
     const { lastUpdated, ...cleanOrder } = order;
 
-    // 2. Prepare payload
-    // If your Supabase columns are NOT JSONB, stringifying them ensures they save as text.
-    // If they ARE JSONB, Supabase handles these JS objects/arrays natively.
     const payload = {
       ...cleanOrder,
-      // Ensure these are in a format Supabase understands (string or JSON)
       items: typeof cleanOrder.items === 'object' ? cleanOrder.items : JSON.parse(cleanOrder.items || '[]'),
       history: typeof cleanOrder.history === 'object' ? cleanOrder.history : JSON.parse(cleanOrder.history || '[]'),
     };
     
-    // 3. Perform Upsert
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('orders')
-      .upsert(payload, { 
-        onConflict: 'id',
-        ignoreDuplicates: false // Ensure it actually UPDATES on conflict
-      })
-      .select(); // Select back to confirm success
+      .upsert(payload, { onConflict: 'id' });
     
     if (error) {
-      console.error('--- Supabase Sync Failure ---');
-      console.error('Order ID:', order.id);
-      console.error('Error Message:', error.message);
-      console.error('Hint:', error.hint);
-      console.error('Details:', error.details);
-      
-      if (error.code === '42P01') {
-        console.error('Table "orders" does not exist in the database.');
-      } else if (error.code === '42703') {
-        console.error('Column name mismatch. Check if column names in DB match the Order object keys exactly.');
-      }
+      console.error('Supabase Order Sync Error:', error.message);
       return false;
     }
     
-    console.log(`Order ${order.id} synced successfully to cloud.`);
     return true;
   } catch (err: any) {
-    console.error('Supabase Connection Failed:', err.message || err);
+    console.error('Supabase Order Sync Failed:', err.message || err);
     return false;
   }
 };
@@ -83,13 +86,21 @@ export const syncOrderToSupabase = async (order: any) => {
  * Syncs a user profile to Supabase.
  */
 export const syncUserToSupabase = async (user: any) => {
+  if (!user) return false;
+  
   try {
-    const id = user.mobile || user.email || 'unknown';
-    const { isLoggedIn, lastUpdated, ...cleanUser } = user;
+    const userId = (user.mobile || user.email || 'unknown').toString().trim();
+    // Remove UI-only state before syncing
+    const { isLoggedIn, lastUpdated, ...dataToSync } = user;
     
     const { error } = await supabase
       .from('users')
-      .upsert({ ...cleanUser, id }, { onConflict: 'id' });
+      .upsert({ 
+        ...dataToSync, 
+        id: userId 
+      }, { 
+        onConflict: 'id' 
+      });
     
     if (error) {
       console.error('Supabase User Sync Error:', error.message);
@@ -97,7 +108,8 @@ export const syncUserToSupabase = async (user: any) => {
     }
     return true;
   } catch (err: any) {
-    console.error('Supabase User Sync Failed:', err.message || err);
+    // TypeError: Failed to fetch usually means CORS issues or the domain is blocked/down
+    console.error('Supabase User Sync Network Error:', err.message || err);
     return false;
   }
 };

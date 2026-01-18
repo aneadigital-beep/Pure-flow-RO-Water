@@ -194,7 +194,7 @@ const App: React.FC = () => {
     setCart([]);
   };
 
-  const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online', extras: { deposit: number }) => {
+  const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online') => {
     if (!user || cart.length === 0) return;
     const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
     const productSummary = cart.map(item => `${item.quantity}x ${item.product.name}`).join(', ');
@@ -211,12 +211,11 @@ const App: React.FC = () => {
       productSummary: productSummary,
       date: now.toLocaleDateString(),
       createdAt: now.toISOString(),
-      total: subtotal + deliveryFee + extras.deposit,
+      total: subtotal + deliveryFee,
       items: [...cart],
       status: 'Pending',
       paymentMethod,
-      history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${timestamp}`, note: 'Order placed' }],
-      depositAmount: extras.deposit
+      history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${timestamp}`, note: 'Order placed' }]
     };
 
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);

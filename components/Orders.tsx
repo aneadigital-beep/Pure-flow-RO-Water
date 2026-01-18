@@ -66,12 +66,6 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId }) => {
                     <span className="dark:text-slate-200">₹{item.product.price * item.quantity}</span>
                   </div>
                 ))}
-                {order.depositAmount ? (
-                  <div className="text-xs text-orange-500 font-bold flex justify-between">
-                    <span>Can Security Deposit</span>
-                    <span>₹{order.depositAmount}</span>
-                  </div>
-                ) : null}
               </div>
               
               <div className="pt-2 border-t border-gray-50 dark:border-slate-700">

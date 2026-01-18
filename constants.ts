@@ -8,7 +8,7 @@ export const PRODUCTS: Product[] = [
     description: 'Freshly purified RO water in a premium sealed 20-liter can.',
     price: 35,
     unit: 'Can',
-    image: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?auto=format&fit=crop&q=80&w=400',
+    image: 'https://images.unsplash.com/photo-1523362628242-f513a00ed072?auto=format&fit=crop&q=80&w=800',
     category: 'can'
   },
   {
@@ -51,6 +51,5 @@ export const PRODUCTS: Product[] = [
 
 export const TOWN_NAME = "Township RO";
 export const DELIVERY_FEE = 10;
-export const CAN_DEPOSIT_FEE = 150;
 export const DEFAULT_UPI_ID = "townshipro@upi";
 export const BUSINESS_PHONE = "9999999999";
