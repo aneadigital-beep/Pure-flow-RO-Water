@@ -81,7 +81,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
       setPinError(true);
       setErrorMessage("Incorrect PIN. Please try again.");
       setPin('');
-      // Vibrate if supported
       if (navigator.vibrate) navigator.vibrate(200);
     }
   };
@@ -161,7 +160,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
 
         {step === 1 && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <form onSubmit={handleEntrySubmit} className="space-y-6">
+            <form onSubmit={handleEntrySubmit} className="space-y-6 text-left">
               <div className="flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl mb-6">
                 <button 
                   type="button"
@@ -179,20 +178,20 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                 </button>
               </div>
 
-              <div className="text-left">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Welcome!</h2>
-                <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Enter your {loginType} to continue.</p>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Welcome!</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Enter your {loginType} to continue.</p>
                 
                 <div className="relative">
                   {loginType === 'mobile' && (
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">+91</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">+91</span>
                   )}
                   <input
                     type={loginType === 'mobile' ? 'tel' : 'email'}
                     value={entryValue}
                     onChange={(e) => setEntryValue(loginType === 'mobile' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value)}
                     placeholder={loginType === 'mobile' ? '00000 00000' : 'name@email.com'}
-                    className={`w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-2xl py-5 ${loginType === 'mobile' ? 'pl-14' : 'px-5'} pr-4 text-gray-800 dark:text-slate-200 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-semibold`}
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-2xl py-5 ${loginType === 'mobile' ? 'pl-14' : 'px-5'} pr-4 text-slate-900 dark:text-white text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold placeholder-slate-400 shadow-sm`}
                     required
                     autoFocus
                   />
@@ -208,7 +207,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
               </button>
             </form>
 
-            <div className="pt-4 border-t border-gray-100 dark:border-slate-800 text-center">
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 text-center">
               <button 
                 onClick={useAdminShortcut}
                 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400 hover:opacity-80 transition-opacity"
@@ -223,8 +222,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
         {step === 4 && (
           <form onSubmit={handleReturningAuthSubmit} className="space-y-6 animate-in fade-in slide-in-from-right-4">
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Enter PIN</h2>
-              <p className="text-sm text-gray-500 dark:text-slate-400">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Enter PIN</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Welcome back, <span className="font-bold text-blue-600">{existingUser?.name}</span>!
               </p>
             </div>
@@ -235,7 +234,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="• • • •"
-                className={`w-48 bg-gray-50 dark:bg-slate-950 border ${pinError ? 'border-red-500 dark:border-red-500' : 'border-gray-200 dark:border-slate-800'} rounded-2xl py-4 text-center text-3xl tracking-[0.75rem] font-bold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors`}
+                className={`w-48 bg-slate-50 dark:bg-slate-950 border-2 ${pinError ? 'border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-800'} rounded-2xl py-4 text-center text-3xl tracking-[0.75rem] font-bold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors placeholder-slate-300 shadow-sm`}
                 required
                 autoFocus
               />
@@ -262,7 +261,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                 <button 
                   type="button" 
                   onClick={() => setStep(1)} 
-                  className="text-[10px] text-gray-400 font-bold uppercase tracking-widest hover:text-blue-500"
+                  className="text-[10px] text-slate-400 font-bold uppercase tracking-widest hover:text-blue-500"
                 >
                   Try different account
                 </button>
@@ -271,82 +270,73 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
           </form>
         )}
 
-        {step === 5 && (
-          <form onSubmit={handleResetRequest} className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Reset PIN</h2>
-              <p className="text-sm text-gray-500 dark:text-slate-400">
-                A verification code will be sent to:
-                <br />
-                <span className="font-bold text-blue-600">{existingUser?.mobile || existingUser?.email}</span>
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-blue-600 dark:bg-blue-500 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : <>Send Reset Code <i className="fas fa-paper-plane text-xs"></i></>}
-            </button>
-            
-            <button 
-              type="button" 
-              onClick={() => setStep(4)} 
-              className="w-full text-xs text-gray-400 font-bold uppercase tracking-widest hover:text-blue-500"
-            >
-              Back to PIN Entry
-            </button>
-          </form>
-        )}
-
         {step === 3 && (
-          <form onSubmit={handleRegistrationSubmit} className="space-y-4 animate-in fade-in slide-in-from-right-4 max-h-[60vh] overflow-y-auto pr-2 scrollbar-hide text-left">
+          <form onSubmit={handleRegistrationSubmit} className="space-y-4 animate-in fade-in slide-in-from-right-4 max-h-[65vh] overflow-y-auto px-1 pr-2 scrollbar-hide text-left">
             <div className="text-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100 mb-1">Create Profile</h2>
-              <p className="text-xs text-gray-500">Fill in your details for easy deliveries.</p>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Create Profile</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Fill in your details for easy deliveries.</p>
             </div>
             
-            <div className="space-y-4">
+            <div className="space-y-4 px-0.5">
               <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Full Name</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. John Doe" className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200" required />
+                <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Full Name</label>
+                <input 
+                  type="text" 
+                  value={name} 
+                  onChange={(e) => setName(e.target.value)} 
+                  placeholder="e.g. John Doe" 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
+                  required 
+                />
               </div>
 
               <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Delivery Address</label>
-                <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street name, Landmark, Building..." className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm h-20 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none dark:text-slate-200" required />
+                <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Delivery Address</label>
+                <textarea 
+                  value={address} 
+                  onChange={(e) => setAddress(e.target.value)} 
+                  placeholder="Street name, Landmark, Building..." 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm h-20 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
+                  required 
+                />
               </div>
 
               <div>
-                <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Pincode</label>
-                <input type="tel" value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="600001" className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200" required />
+                <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Pincode</label>
+                <input 
+                  type="tel" 
+                  value={pincode} 
+                  onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} 
+                  placeholder="600001" 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
+                  required 
+                />
               </div>
 
               <div className="space-y-3 pt-2">
-                <h4 className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 border-b border-blue-50 dark:border-blue-900/30 pb-1">
+                <h4 className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 border-b-2 border-blue-50 dark:border-blue-900/30 pb-1 ml-1">
                   Security Setup (4-Digit PIN)
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Set PIN</label>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Set PIN</label>
                     <input 
                       type="password" 
                       value={pin} 
                       onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} 
                       placeholder="• • • •" 
-                      className={`w-full bg-gray-50 dark:bg-slate-950 border ${pinError ? 'border-red-500' : 'border-gray-100 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center tracking-widest dark:text-slate-200 font-bold`} 
+                      className={`w-full bg-slate-50 dark:bg-slate-950 border-2 ${pinError ? 'border-red-500' : 'border-slate-300 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center tracking-widest text-slate-900 dark:text-white font-bold placeholder-slate-300 shadow-sm`} 
                       required 
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Confirm PIN</label>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Confirm PIN</label>
                     <input 
                       type="password" 
                       value={confirmValue} 
                       onChange={(e) => setConfirmValue(e.target.value.replace(/\D/g, '').slice(0, 4))} 
                       placeholder="• • • •" 
-                      className={`w-full bg-gray-50 dark:bg-slate-950 border ${errorMessage.includes('match') ? 'border-red-500' : 'border-gray-100 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center tracking-widest dark:text-slate-200 font-bold`} 
+                      className={`w-full bg-slate-50 dark:bg-slate-950 border-2 ${errorMessage.includes('match') ? 'border-red-500' : 'border-slate-300 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center tracking-widest text-slate-900 dark:text-white font-bold placeholder-slate-300 shadow-sm`} 
                       required 
                     />
                   </div>
@@ -357,11 +347,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg mt-6 active:scale-95"
+              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg mt-6 active:scale-95 transition-all"
             >
               Complete Registration
             </button>
-            <button type="button" onClick={() => setStep(1)} className="w-full text-xs text-gray-400 font-bold uppercase tracking-widest hover:text-blue-500 py-2">Back</button>
+            <button type="button" onClick={() => setStep(1)} className="w-full text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest hover:text-blue-500 py-2">Back</button>
           </form>
         )}
       </div>
