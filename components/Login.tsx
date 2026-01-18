@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 
 interface LoginProps {
@@ -8,7 +8,7 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
-  const [step, setStep] = useState<1 | 3 | 4>(1); // 1: Entry, 3: Registration, 4: Returning User Auth
+  const [step, setStep] = useState<1 | 3 | 4 | 5>(1); // 1: Entry, 3: Reg, 4: PIN, 5: Forgot PIN
   const [loginType, setLoginType] = useState<'mobile' | 'email'>('mobile');
   const [entryValue, setEntryValue] = useState('');
   const [pin, setPin] = useState('');
@@ -18,10 +18,18 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
   const [address, setAddress] = useState('');
   const [pincode, setPincode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [pinError, setPinError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   const [existingUser, setExistingUser] = useState<User | null>(null);
 
   const ADMIN_ID = '9999999999';
+
+  // Reset error messages when typing
+  useEffect(() => {
+    if (pinError) setPinError(false);
+    if (errorMessage) setErrorMessage('');
+  }, [pin, entryValue]);
 
   const handleEntrySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +39,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
     const searchTerm = entryValue.trim();
 
     setTimeout(() => {
-      // Robust lookup: check both mobile and email fields across all users
       const user = registeredUsers.find(u => 
         (u.mobile && u.mobile === searchTerm) || 
         (u.email && u.email.toLowerCase() === searchTerm.toLowerCase())
@@ -40,14 +47,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
       setIsLoading(false);
       if (user) {
         setExistingUser(user);
-        setStep(4); // Found user! Go to PIN step
+        setStep(4);
       } else {
-        // If it's the admin ID and not registered yet, pre-fill and go to registration
         if (searchTerm === ADMIN_ID) {
           setName('Main Administrator');
           setStep(3);
         } else {
-          setStep(3); // New user! Start Registration directly
+          setStep(3);
         }
       }
     }, 800);
@@ -72,8 +78,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
         });
       }, 500);
     } else {
-      alert("Incorrect PIN. Please try again.");
+      setPinError(true);
+      setErrorMessage("Incorrect PIN. Please try again.");
       setPin('');
+      // Vibrate if supported
+      if (navigator.vibrate) navigator.vibrate(200);
     }
   };
 
@@ -81,7 +90,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
     e.preventDefault();
     if (name && address && pincode && pin.length === 4) {
       if (pin !== confirmValue) {
-        alert("PINs do not match!");
+        setErrorMessage("PINs do not match!");
         return;
       }
       onLogin({
@@ -96,6 +105,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
     }
   };
 
+  const handleForgotPin = () => {
+    setStep(5);
+  };
+
+  const handleResetRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoading(false);
+      const method = existingUser?.mobile ? 'SMS' : 'Email';
+      alert(`A recovery code has been sent to your registered ${method}. For this demo, your PIN is: ${existingUser?.pin}`);
+      setStep(4);
+    }, 1500);
+  };
+
   const useAdminShortcut = () => {
     setLoginType('mobile');
     setEntryValue(ADMIN_ID);
@@ -103,6 +127,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-blue-600 dark:bg-slate-950 px-6 py-12 transition-colors duration-500">
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+        .animate-shake {
+          animation: shake 0.2s ease-in-out 0s 2;
+        }
+      `}</style>
+
       <div className="mb-8 text-center text-white">
         <div className="h-20 w-20 bg-white dark:bg-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
           <i className="fas fa-droplet text-4xl text-blue-600 dark:text-blue-400"></i>
@@ -114,11 +149,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
       <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden transition-colors">
         
         <div className="flex justify-center gap-1.5 mb-8">
-          {[1, 2].map((s) => (
+          {[1, 2, 3].map((s) => (
             <div 
               key={s} 
               className={`h-1 rounded-full transition-all duration-300 ${
-                (step === 1 ? 1 : 2) === s ? 'w-8 bg-blue-600 dark:bg-blue-400' : 'w-2 bg-gray-100 dark:bg-slate-800'
+                (step === 1 ? 1 : step === 3 ? 2 : 3) === s ? 'w-8 bg-blue-600 dark:bg-blue-400' : 'w-2 bg-gray-100 dark:bg-slate-800'
               }`} 
             />
           ))}
@@ -194,26 +229,74 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
               </p>
             </div>
 
-            <div className="flex justify-center py-2">
+            <div className={`flex flex-col items-center py-2 ${pinError ? 'animate-shake' : ''}`}>
               <input
                 type="password"
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="• • • •"
-                className="w-48 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl py-4 text-center text-3xl tracking-[0.75rem] font-bold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-48 bg-gray-50 dark:bg-slate-950 border ${pinError ? 'border-red-500 dark:border-red-500' : 'border-gray-200 dark:border-slate-800'} rounded-2xl py-4 text-center text-3xl tracking-[0.75rem] font-bold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors`}
                 required
                 autoFocus
               />
+              {errorMessage && <p className="text-red-500 text-[10px] font-bold mt-2 animate-in fade-in">{errorMessage}</p>}
+            </div>
+
+            <div className="space-y-3">
+              <button
+                type="submit"
+                disabled={pin.length < 4 || isLoading}
+                className="w-full bg-blue-600 dark:bg-blue-500 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Unlock Account'}
+              </button>
+              
+              <div className="flex flex-col gap-2 pt-2">
+                <button 
+                  type="button" 
+                  onClick={handleForgotPin}
+                  className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest hover:underline"
+                >
+                  Forgot PIN?
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setStep(1)} 
+                  className="text-[10px] text-gray-400 font-bold uppercase tracking-widest hover:text-blue-500"
+                >
+                  Try different account
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {step === 5 && (
+          <form onSubmit={handleResetRequest} className="space-y-6 animate-in fade-in slide-in-from-right-4">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Reset PIN</h2>
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                A verification code will be sent to:
+                <br />
+                <span className="font-bold text-blue-600">{existingUser?.mobile || existingUser?.email}</span>
+              </p>
             </div>
 
             <button
               type="submit"
-              disabled={pin.length < 4 || isLoading}
-              className="w-full bg-blue-600 dark:bg-blue-500 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50"
+              disabled={isLoading}
+              className="w-full bg-blue-600 dark:bg-blue-500 text-white py-5 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              Unlock Account
+              {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : <>Send Reset Code <i className="fas fa-paper-plane text-xs"></i></>}
             </button>
-            <button type="button" onClick={() => setStep(1)} className="w-full text-xs text-gray-400 font-bold uppercase tracking-widest hover:text-blue-500 mt-2">Try different account</button>
+            
+            <button 
+              type="button" 
+              onClick={() => setStep(4)} 
+              className="w-full text-xs text-gray-400 font-bold uppercase tracking-widest hover:text-blue-500"
+            >
+              Back to PIN Entry
+            </button>
           </form>
         )}
 
@@ -252,7 +335,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                       value={pin} 
                       onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} 
                       placeholder="• • • •" 
-                      className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center tracking-widest dark:text-slate-200 font-bold" 
+                      className={`w-full bg-gray-50 dark:bg-slate-950 border ${pinError ? 'border-red-500' : 'border-gray-100 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center tracking-widest dark:text-slate-200 font-bold`} 
                       required 
                     />
                   </div>
@@ -263,11 +346,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                       value={confirmValue} 
                       onChange={(e) => setConfirmValue(e.target.value.replace(/\D/g, '').slice(0, 4))} 
                       placeholder="• • • •" 
-                      className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center tracking-widest dark:text-slate-200 font-bold" 
+                      className={`w-full bg-gray-50 dark:bg-slate-950 border ${errorMessage.includes('match') ? 'border-red-500' : 'border-gray-100 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center tracking-widest dark:text-slate-200 font-bold`} 
                       required 
                     />
                   </div>
                 </div>
+                {errorMessage && <p className="text-red-500 text-[10px] font-bold mt-1 text-center">{errorMessage}</p>}
               </div>
             </div>
 
