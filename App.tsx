@@ -257,6 +257,42 @@ const App: React.FC = () => {
     if (staffMobile) addNotification('New Task', `Order ${orderId} assigned to you.`, 'delivery', false, staffMobile);
   }, [registeredUsers, allOrders, addNotification]);
 
+  // Catalog Management
+  const handleAddProduct = useCallback(async (product: Product) => {
+    await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
+    setActiveToast({ title: "Product Added", message: `${product.name} is now in catalog.` });
+  }, []);
+
+  const handleUpdateProduct = useCallback(async (product: Product) => {
+    await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
+    setActiveToast({ title: "Product Updated", message: `${product.name} changes saved.` });
+  }, []);
+
+  const handleDeleteProduct = useCallback(async (id: string) => {
+    await deleteDocument(COLLECTIONS.PRODUCTS, id);
+    setActiveToast({ title: "Product Removed", message: "Item deleted from catalog." });
+  }, []);
+
+  // Staff Management
+  const handleAddStaff = useCallback(async (mobile: string, name: string) => {
+    const id = normalizeId(mobile);
+    const existing = await getDocument(COLLECTIONS.USERS, id);
+    const newStaff: User = existing ? { ...existing as User, isDeliveryBoy: true, name } : { mobile, name, address: '', pincode: '', isLoggedIn: false, isDeliveryBoy: true };
+    await upsertDocument(COLLECTIONS.USERS, id, newStaff);
+    await syncUserToSupabase(newStaff);
+    setActiveToast({ title: "Staff Added", message: `${name} registered as staff.` });
+  }, []);
+
+  const handleUpdateStaffRole = useCallback(async (mobile: string, isDelivery: boolean) => {
+    const id = normalizeId(mobile);
+    await updateDocument(COLLECTIONS.USERS, id, { isDeliveryBoy: isDelivery });
+  }, []);
+
+  const handleUpdateAdminRole = useCallback(async (mobile: string, isAdmin: boolean) => {
+    const id = normalizeId(mobile);
+    await updateDocument(COLLECTIONS.USERS, id, { isAdmin: isAdmin });
+  }, []);
+
   if (appLoading) return <SplashScreen />;
   if (!user) return <Login onLogin={handleLogin} registeredUsers={registeredUsers} />;
 
@@ -299,7 +335,27 @@ const App: React.FC = () => {
         {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} />}
         {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
         {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile || '') === normalizeId(user.mobile || user.email || ''))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
-        {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} onUpdateDeliveryFee={(f) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f })} onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })} onAssignOrder={assignOrder} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
+        {currentView === 'admin' && (
+          <Admin 
+            products={products} 
+            orders={allOrders} 
+            onUpdateStatus={updateOrderStatus} 
+            registeredUsers={registeredUsers} 
+            upiId={upiId} 
+            deliveryFee={deliveryFee} 
+            onUpdateDeliveryFee={(f) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f })} 
+            onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })} 
+            onAssignOrder={assignOrder} 
+            onAddProduct={handleAddProduct}
+            onUpdateProduct={handleUpdateProduct}
+            onDeleteProduct={handleDeleteProduct}
+            onAddStaff={handleAddStaff}
+            onUpdateStaffRole={handleUpdateStaffRole}
+            onUpdateAdminRole={handleUpdateAdminRole}
+            onBack={() => setCurrentView('profile')} 
+            isCloudSynced={isCloudSynced} 
+          />
+        )}
         {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
       </main>
 
