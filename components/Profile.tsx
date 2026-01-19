@@ -9,21 +9,12 @@ interface ProfileProps {
   onDeliveryClick: () => void;
   onNotificationsClick: () => void;
   unreadNotifCount: number;
-  onEditClick: () => void;
 }
 
-const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onDeliveryClick, onNotificationsClick, unreadNotifCount, onEditClick }) => {
+const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onDeliveryClick, onNotificationsClick, unreadNotifCount }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex flex-col items-center py-6 relative">
-        {/* Edit Button */}
-        <button 
-          onClick={onEditClick}
-          className="absolute right-0 top-6 h-10 w-10 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center justify-center text-blue-600 dark:text-blue-400 hover:bg-blue-50 transition-all active:scale-95"
-        >
-          <i className="fas fa-user-pen"></i>
-        </button>
-
+      <div className="flex flex-col items-center py-6">
         <div className="h-24 w-24 rounded-full bg-blue-100 dark:bg-slate-800 border-4 border-white dark:border-slate-700 shadow-md flex items-center justify-center overflow-hidden mb-4 relative">
           {user.avatar ? (
             <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
@@ -36,10 +27,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onAdminClick, onDeliv
             </div>
           )}
         </div>
-        
         <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100">{user.name}</h2>
         <p className="text-gray-500 dark:text-slate-400 text-sm">{user.mobile || user.email}</p>
-        
         <div className="flex gap-2 mt-2">
           {user.isAdmin && (
             <span className="text-[8px] font-black bg-yellow-400 text-white px-2 py-0.5 rounded shadow-sm uppercase tracking-wider">Administrator</span>
