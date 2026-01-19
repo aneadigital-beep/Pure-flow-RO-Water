@@ -49,7 +49,7 @@ export const PRODUCTS: Product[] = [
   }
 ];
 
-export const TOWN_NAME = "Township RO";
+export const TOWN_NAME = "PureFlow";
 export const DELIVERY_FEE = 10;
-export const DEFAULT_UPI_ID = "townshipro@upi";
+export const DEFAULT_UPI_ID = "pureflow@upi";
 export const BUSINESS_PHONE = "9999999999";

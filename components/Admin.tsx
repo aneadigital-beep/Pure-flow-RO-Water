@@ -57,7 +57,6 @@ const Admin: React.FC<AdminProps> = ({
     name: '', description: '', price: 0, unit: 'Can', image: '', category: 'can'
   });
 
-  // Cropper State
   const [showCropper, setShowCropper] = useState(false);
   const [rawImage, setRawImage] = useState<string | null>(null);
   const [cropState, setCropState] = useState({ zoom: 1, x: 0, y: 0 });
@@ -68,7 +67,6 @@ const Admin: React.FC<AdminProps> = ({
   const [staffForm, setStaffForm] = useState({ name: '', mobile: '' });
   const [isProcessingImg, setIsProcessingImg] = useState(false);
   
-  // Deletion tracking
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
@@ -169,7 +167,13 @@ const Admin: React.FC<AdminProps> = ({
 
   const handleUpdateTask = () => {
     if (!selectedOrder) return;
-    if (tempStaff !== selectedOrder.assignedToMobile) onAssignOrder(selectedOrder.id, tempStaff);
+    
+    // Trigger assignment update if selection differs from existing
+    const currentStaffId = tempStaff || undefined;
+    if (currentStaffId !== selectedOrder.assignedToMobile) {
+      onAssignOrder(selectedOrder.id, currentStaffId);
+    }
+    
     onUpdateStatus(selectedOrder.id, tempStatus, adminNote || `Updated by Admin`);
     setSelectedOrderId(null);
   };
@@ -319,10 +323,14 @@ const Admin: React.FC<AdminProps> = ({
 
                 <div>
                   <label className="text-[10px] text-blue-600 font-black uppercase mb-1.5 block">Assign Partner</label>
-                  <select value={tempStaff || ''} onChange={(e) => setTempStaff(e.target.value || undefined)} className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all outline-none">
-                    <option value="">-- No Staff --</option>
+                  <select 
+                    value={tempStaff || ''} 
+                    onChange={(e) => setTempStaff(e.target.value || undefined)} 
+                    className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all outline-none"
+                  >
+                    <option value="">-- No Staff / Unassigned --</option>
                     {deliveryBoys.map(db => (
-                      <option key={db.mobile} value={db.mobile}>{db.name}</option>
+                      <option key={db.mobile || db.email} value={db.mobile || db.email}>{db.name}</option>
                     ))}
                   </select>
                 </div>
