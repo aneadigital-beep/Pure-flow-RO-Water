@@ -100,17 +100,10 @@ const App: React.FC = () => {
     });
 
     const unsubProducts = syncCollection(COLLECTIONS.PRODUCTS, (data) => {
-      const initialized = localStorage.getItem('pf_products_initialized');
       if (data && data.length > 0) {
         setProducts(data as Product[]);
-        localStorage.setItem('pf_products_initialized', 'true');
-      } else if (!initialized) {
-        // Only seed if we've never initialized products before
-        INITIAL_PRODUCTS.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
-        localStorage.setItem('pf_products_initialized', 'true');
       } else {
-        // It's empty because the user explicitly deleted everything
-        setProducts([]);
+        INITIAL_PRODUCTS.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
       }
     });
 
@@ -203,12 +196,18 @@ const App: React.FC = () => {
     const oldId = normalizeId(user.mobile || user.email || '');
     const newId = normalizeId(updatedUser.mobile || updatedUser.email || '');
     
+    // Update local state
     setUser(updatedUser);
+    
+    // Sync to local DB
     await upsertDocument(COLLECTIONS.USERS, newId, updatedUser);
     if (oldId !== newId) {
       await deleteDocument(COLLECTIONS.USERS, oldId);
     }
+    
+    // Sync to cloud
     await syncUserToSupabase(updatedUser);
+    
     setActiveToast({ title: "Profile Updated", message: "Your changes have been saved successfully." });
     setCurrentView('profile');
   };
@@ -323,20 +322,22 @@ const App: React.FC = () => {
   const unreadCount = relevantNotifications.filter(n => !n.isRead).length;
 
   return (
-    <div className="flex h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
+    <div className="flex h-full w-full transition-colors duration-300 bg-slate-50 dark:bg-slate-900 overflow-hidden">
       {activeToast && <Toast title={activeToast.title} message={activeToast.message} onClose={() => setActiveToast(null)} />}
       
+      {/* Sidebar Navbar (Fixed Left) */}
       <Navbar currentView={currentView} onViewChange={setCurrentView} cartCount={cart.reduce((a, b) => a + b.quantity, 0)} />
 
-      <div className="flex-1 flex flex-col pl-20 relative h-full">
-        <header className="flex-none z-40 transition-all duration-300 backdrop-blur-md border-b shadow-lg bg-blue-600 border-blue-500/30 dark:bg-slate-900/95 dark:border-slate-800 safe-top">
-          <div className="w-full flex justify-between items-center py-4 px-6 text-white">
+      {/* Main Content Area - Offset by Sidebar width */}
+      <div className="flex-1 flex flex-col pl-20 transition-all duration-300 relative h-full">
+        <header className="flex-none z-40 transition-all duration-300 backdrop-blur-md border-b shadow-lg bg-blue-600/95 border-blue-500/30 dark:bg-slate-900/95 dark:border-slate-800 safe-top">
+          <div className="max-w-2xl mx-auto w-full flex justify-between items-center py-3.5 px-4 text-white">
             <div className="flex items-center gap-3">
               <div 
                 className="flex items-center gap-2.5 cursor-pointer group" 
                 onClick={() => setCurrentView('home')}
               >
-                <div className="h-9 w-9 bg-white/10 rounded-xl flex items-center justify-center group-hover:bg-white/20 transition-all">
+                <div className="h-8 w-8 bg-white/10 rounded-lg flex items-center justify-center group-hover:bg-white/20 transition-all">
                   <i className="fas fa-droplet text-blue-200 group-hover:scale-110 transition-transform"></i>
                 </div>
                 <div className="flex flex-col -space-y-1 text-left">
@@ -351,7 +352,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
               <button 
                 onClick={() => setIsDarkMode(!isDarkMode)} 
                 className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
@@ -375,8 +376,9 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto scrollbar-hide pb-10">
-          <div className="max-w-4xl mx-auto w-full px-6 pt-6 safe-bottom">
+        {/* Scrollable Container */}
+        <main className="flex-1 app-scroll-container pb-10 overflow-x-hidden scrollbar-hide">
+          <div className="max-w-2xl mx-auto w-full px-4 pt-6 safe-bottom">
             {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
             {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
             {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} onEditClick={() => setCurrentView('edit-profile')} />}
