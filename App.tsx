@@ -46,10 +46,12 @@ const App: React.FC = () => {
   const [activeToast, setActiveToast] = useState<{title: string, message: string} | null>(null);
   const [appLoading, setAppLoading] = useState(true);
   const [isCloudSynced, setIsCloudSynced] = useState(false);
-  const [townId] = useState(getTownId());
 
-  // Utility to normalize mobile numbers
   const normalizeId = (id: string) => id.replace(/\D/g, '').trim();
+
+  useEffect(() => {
+    localStorage.setItem('pureflow_user', JSON.stringify(user));
+  }, [user]);
 
   useEffect(() => {
     localStorage.setItem('pureflow_notifications', JSON.stringify(notifications));
@@ -97,10 +99,15 @@ const App: React.FC = () => {
     });
 
     const unsubProducts = syncCollection(COLLECTIONS.PRODUCTS, (data) => {
+      const initialized = localStorage.getItem('pf_products_initialized');
       if (data && data.length > 0) {
         setProducts(data as Product[]);
-      } else {
+        localStorage.setItem('pf_products_initialized', 'true');
+      } else if (!initialized) {
         INITIAL_PRODUCTS.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
+        localStorage.setItem('pf_products_initialized', 'true');
+      } else {
+        setProducts([]);
       }
     });
 
@@ -256,7 +263,6 @@ const App: React.FC = () => {
     if (staffMobile) addNotification('New Task', `Order ${orderId} assigned to you.`, 'delivery', false, staffMobile);
   }, [registeredUsers, allOrders, addNotification]);
 
-  // Catalog Management
   const handleAddProduct = useCallback(async (product: Product) => {
     await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
     setActiveToast({ title: "Product Added", message: `${product.name} is now in catalog.` });
@@ -272,7 +278,6 @@ const App: React.FC = () => {
     setActiveToast({ title: "Product Removed", message: "Item deleted from catalog." });
   }, []);
 
-  // Staff Management
   const handleAddStaff = useCallback(async (mobile: string, name: string) => {
     const id = normalizeId(mobile);
     const existing = await getDocument(COLLECTIONS.USERS, id);
@@ -300,65 +305,93 @@ const App: React.FC = () => {
   const unreadCount = relevantNotifications.filter(n => !n.isRead).length;
 
   return (
-    <div className={`flex flex-col min-h-screen transition-colors duration-300 bg-slate-50 dark:bg-slate-900 pb-20`}>
+    <div className="flex flex-col md:flex-row h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
       {activeToast && <Toast title={activeToast.title} message={activeToast.message} onClose={() => setActiveToast(null)} />}
       
-      <header className={`text-white p-4 shadow-md sticky top-0 z-50 ${user.isDeliveryBoy ? 'bg-green-600 dark:bg-green-800' : 'bg-blue-600 dark:bg-blue-800'}`}>
-        <div className="flex justify-between items-center max-w-2xl mx-auto">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView('home')}>
-              <i className="fas fa-droplet text-blue-200"></i>
-              {TOWN_NAME}
-            </h1>
-            <div className={`h-2 w-2 rounded-full ${isCloudSynced ? 'bg-green-400' : 'bg-red-400'} animate-pulse`} title={isCloudSynced ? 'Cloud Synced' : 'Offline Mode'}></div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-white/10 transition-colors">
-              <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i>
-            </button>
-            <button onClick={() => setCurrentView('notifications')} className="relative p-2 rounded-full hover:bg-white/10 transition-colors">
-              <i className="fas fa-bell"></i>
-              {unreadCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full border border-blue-600"></span>}
-            </button>
-            <div className="h-8 w-8 rounded-full border border-white/20 overflow-hidden cursor-pointer" onClick={() => setCurrentView('profile')}>
-              {user.avatar ? <img src={user.avatar} className="h-full w-full object-cover" alt="" /> : <div className="h-full w-full flex items-center justify-center text-xs font-bold uppercase bg-white/20">{user.name.charAt(0)}</div>}
+      <Navbar currentView={currentView} onViewChange={setCurrentView} cartCount={cart.reduce((a, b) => a + b.quantity, 0)} />
+
+      <div className="flex-1 flex flex-col relative h-full md:pl-20 pb-20 md:pb-0 transition-all duration-300">
+        <header className="flex-none z-40 transition-all duration-300 backdrop-blur-md border-b shadow-lg bg-blue-600 border-blue-500/30 dark:bg-slate-900/95 dark:border-slate-800 pt-safe">
+          <div className="w-full flex justify-between items-center py-4 px-6 text-white max-w-4xl mx-auto">
+            <div className="flex items-center gap-3">
+              <div 
+                className="flex items-center gap-2.5 cursor-pointer group" 
+                onClick={() => setCurrentView('home')}
+              >
+                <div className="h-9 w-9 bg-white/10 rounded-xl flex items-center justify-center group-hover:bg-white/20 transition-all">
+                  <i className="fas fa-droplet text-blue-200 group-hover:scale-110 transition-transform"></i>
+                </div>
+                <div className="flex flex-col -space-y-1 text-left">
+                  <h1 className="text-lg font-black tracking-tight uppercase leading-none">{TOWN_NAME}</h1>
+                  <div className="flex items-center gap-1.5">
+                    <div className={`h-1.5 w-1.5 rounded-full ${isCloudSynced ? 'bg-green-400' : 'bg-red-400'} animate-pulse`}></div>
+                    <span className="text-[8px] font-bold uppercase tracking-widest opacity-60">
+                      {isCloudSynced ? 'Cloud' : 'Local'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsDarkMode(!isDarkMode)} 
+                className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
+                aria-label="Toggle Dark Mode"
+              >
+                <i className={`fas ${isDarkMode ? 'fa-sun text-yellow-300' : 'fa-moon'}`}></i>
+              </button>
+              <button 
+                onClick={() => setCurrentView('notifications')} 
+                className="h-10 w-10 relative flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
+                aria-label="Notifications"
+              >
+                <i className="fas fa-bell"></i>
+                {unreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full"></span>}
+              </button>
+              <div 
+                className="h-9 w-9 rounded-xl border-2 border-white/20 overflow-hidden cursor-pointer hover:border-white/40 transition-colors" 
+                onClick={() => setCurrentView('profile')}
+              >
+                {user.avatar ? <img src={user.avatar} className="h-full w-full object-cover" alt="User" /> : <div className="h-full w-full flex items-center justify-center text-xs font-black uppercase bg-white/10">{user.name.charAt(0)}</div>}
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 pt-6">
-        {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
-        {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
-        {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
-        {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} />}
-        {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
-        {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile || '') === normalizeId(user.mobile || user.email || ''))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
-        {currentView === 'admin' && (
-          <Admin 
-            products={products} 
-            orders={allOrders} 
-            onUpdateStatus={updateOrderStatus} 
-            registeredUsers={registeredUsers} 
-            upiId={upiId} 
-            deliveryFee={deliveryFee} 
-            onUpdateDeliveryFee={(f) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f })} 
-            onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })} 
-            onAssignOrder={assignOrder} 
-            onAddProduct={handleAddProduct}
-            onUpdateProduct={handleUpdateProduct}
-            onDeleteProduct={handleDeleteProduct}
-            onAddStaff={handleAddStaff}
-            onUpdateStaffRole={handleUpdateStaffRole}
-            onUpdateAdminRole={handleUpdateAdminRole}
-            onBack={() => setCurrentView('profile')} 
-            isCloudSynced={isCloudSynced} 
-          />
-        )}
-        {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
-      </main>
-
-      <Navbar currentView={currentView} onViewChange={setCurrentView} cartCount={cart.reduce((a, b) => a + b.quantity, 0)} />
+        <main className="flex-1 overflow-y-auto scrollbar-hide">
+          <div className="max-w-4xl mx-auto w-full px-6 pt-6 pb-12 safe-bottom">
+            {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
+            {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
+            {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} />}
+            {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} />}
+            {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
+            {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile || '') === normalizeId(user.mobile || user.email || ''))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
+            {currentView === 'admin' && (
+              <Admin 
+                products={products} 
+                orders={allOrders} 
+                onUpdateStatus={updateOrderStatus} 
+                registeredUsers={registeredUsers} 
+                upiId={upiId} 
+                deliveryFee={deliveryFee} 
+                onUpdateDeliveryFee={(f) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f })} 
+                onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })} 
+                onAssignOrder={assignOrder} 
+                onAddProduct={handleAddProduct}
+                onUpdateProduct={handleUpdateProduct}
+                onDeleteProduct={handleDeleteProduct}
+                onAddStaff={handleAddStaff}
+                onUpdateStaffRole={handleUpdateStaffRole}
+                onUpdateAdminRole={handleUpdateAdminRole}
+                onBack={() => setCurrentView('profile')} 
+                isCloudSynced={isCloudSynced} 
+              />
+            )}
+            {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
+          </div>
+        </main>
+      </div>
     </div>
   );
 };
