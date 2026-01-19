@@ -101,7 +101,10 @@ const Admin: React.FC<AdminProps> = ({
       const isTeamMember = u.isAdmin || u.isDeliveryBoy;
       if (!isTeamMember) return false;
       const search = staffSearch.toLowerCase();
-      return u.name.toLowerCase().includes(search) || (u.mobile && u.mobile.includes(search)) || (u.email && u.email.toLowerCase().includes(search));
+      const nameMatch = u.name?.toLowerCase().includes(search);
+      const mobileMatch = u.mobile?.includes(search);
+      const emailMatch = u.email?.toLowerCase().includes(search);
+      return nameMatch || mobileMatch || emailMatch;
     });
   }, [registeredUsers, staffSearch]);
 
@@ -177,7 +180,7 @@ const Admin: React.FC<AdminProps> = ({
 
   if (selectedOrder) {
     return (
-      <div className="space-y-6 animate-in slide-in-from-right-4 pb-10 text-left">
+      <div className="space-y-6 animate-in slide-in-from-right-4 pb-10 text-left px-1">
         <div className="flex items-center gap-4">
           <button onClick={() => setSelectedOrderId(null)} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-gray-600 dark:text-slate-300 transition-transform active:scale-90">
             <i className="fas fa-arrow-left"></i>
@@ -231,7 +234,7 @@ const Admin: React.FC<AdminProps> = ({
                     value={adminNote}
                     onChange={(e) => setAdminNote(e.target.value)}
                     placeholder="Internal comments..."
-                    className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none h-20 resize-none transition-all shadow-sm"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none h-20 resize-none transition-all shadow-sm"
                   />
                 </div>
            </div>
@@ -243,7 +246,7 @@ const Admin: React.FC<AdminProps> = ({
   }
 
   return (
-    <div className="space-y-6 pb-20 relative text-left px-0.5">
+    <div className="space-y-6 pb-20 relative text-left px-1">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Business Control</h2>
         <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 transition-transform active:scale-90"><i className="fas fa-arrow-left"></i></button>
@@ -334,17 +337,17 @@ const Admin: React.FC<AdminProps> = ({
                     </button>
                   </div>
                   <div className="flex-1 space-y-3">
-                    <input type="text" placeholder="Product Name" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all shadow-sm" required />
+                    <input type="text" placeholder="Product Name" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all shadow-sm" required />
                     <div className="flex gap-2">
-                      <input type="number" placeholder="Price" value={prodForm.price} onChange={e => setProdForm({...prodForm, price: Number(e.target.value)})} className="flex-1 bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all shadow-sm" required />
-                      <input type="text" placeholder="Unit" value={prodForm.unit} onChange={e => setProdForm({...prodForm, unit: e.target.value})} className="w-20 bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all shadow-sm" required />
+                      <input type="number" placeholder="Price" value={prodForm.price} onChange={e => setProdForm({...prodForm, price: Number(e.target.value)})} className="flex-1 bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all shadow-sm" required />
+                      <input type="text" placeholder="Unit" value={prodForm.unit} onChange={e => setProdForm({...prodForm, unit: e.target.value})} className="w-20 bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all shadow-sm" required />
                     </div>
                   </div>
                 </div>
                 
                 <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
 
-                <textarea placeholder="Product Description..." value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-slate-200 h-24 resize-none focus:border-blue-500 transition-all shadow-sm" />
+                <textarea placeholder="Product Description..." value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-slate-200 h-24 resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all shadow-sm" />
 
                 <div className="grid grid-cols-3 gap-2">
                    {(['can', 'subscription', 'accessory'] as const).map(cat => (
@@ -400,8 +403,8 @@ const Admin: React.FC<AdminProps> = ({
                   <button type="button" onClick={() => setIsAddingStaff(false)} className="text-slate-400 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
                 </div>
                 <div className="space-y-3 px-0.5">
-                  <input type="text" placeholder="Staff Name" value={staffForm.name} onChange={e => setStaffForm({...staffForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all shadow-sm" required />
-                  <input type="tel" placeholder="Mobile Number (10 digits)" value={staffForm.mobile} onChange={e => setStaffForm({...staffForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all shadow-sm" required />
+                  <input type="text" placeholder="Staff Name" value={staffForm.name} onChange={e => setStaffForm({...staffForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all shadow-sm" required />
+                  <input type="tel" placeholder="Mobile Number (10 digits)" value={staffForm.mobile} onChange={e => setStaffForm({...staffForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all shadow-sm" required />
                   <button type="submit" className="w-full bg-green-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Register Staff</button>
                 </div>
              </form>
@@ -458,7 +461,7 @@ const Admin: React.FC<AdminProps> = ({
                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block">Global Delivery Fee</label>
                  <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">₹</span>
-                    <input type="number" value={settingsForm.fee} onChange={e => setSettingsForm({...settingsForm, fee: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl py-4 pl-10 pr-4 font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all shadow-sm" />
+                    <input type="number" value={settingsForm.fee} onChange={e => setSettingsForm({...settingsForm, fee: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl py-4 pl-10 pr-4 font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all shadow-sm" />
                  </div>
               </div>
 
@@ -466,7 +469,7 @@ const Admin: React.FC<AdminProps> = ({
                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block">Business UPI ID</label>
                  <div className="relative">
                     <i className="fas fa-qrcode absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="text" value={settingsForm.upi} onChange={e => setSettingsForm({...settingsForm, upi: e.target.value})} placeholder="example@upi" className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl py-4 pl-12 pr-4 font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all shadow-sm" />
+                    <input type="text" value={settingsForm.upi} onChange={e => setSettingsForm({...settingsForm, upi: e.target.value})} placeholder="example@upi" className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl py-4 pl-12 pr-4 font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all shadow-sm" />
                  </div>
                  <p className="text-[9px] text-slate-400 font-medium mt-2 italic px-1">This ID will be used to generate dynamic QR codes for customers.</p>
               </div>

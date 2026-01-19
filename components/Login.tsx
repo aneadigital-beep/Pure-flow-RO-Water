@@ -108,17 +108,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
     setStep(5);
   };
 
-  const handleResetRequest = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      const method = existingUser?.mobile ? 'SMS' : 'Email';
-      alert(`A recovery code has been sent to your registered ${method}. For this demo, your PIN is: ${existingUser?.pin}`);
-      setStep(4);
-    }, 1500);
-  };
-
   const useAdminShortcut = () => {
     setLoginType('mobile');
     setEntryValue(ADMIN_ID);
@@ -178,7 +167,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                 </button>
               </div>
 
-              <div>
+              <div className="px-1">
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Welcome!</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Enter your {loginType} to continue.</p>
                 
@@ -191,7 +180,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                     value={entryValue}
                     onChange={(e) => setEntryValue(loginType === 'mobile' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value)}
                     placeholder={loginType === 'mobile' ? '00000 00000' : 'name@email.com'}
-                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-2xl py-5 ${loginType === 'mobile' ? 'pl-14' : 'px-5'} pr-4 text-slate-900 dark:text-white text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-semibold placeholder-slate-400 shadow-sm`}
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-2xl py-5 ${loginType === 'mobile' ? 'pl-14' : 'px-5'} pr-4 text-slate-900 dark:text-white text-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-semibold placeholder-slate-400 shadow-sm`}
                     required
                     autoFocus
                   />
@@ -221,7 +210,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
 
         {step === 4 && (
           <form onSubmit={handleReturningAuthSubmit} className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <div className="text-center">
+            <div className="text-center px-1">
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Enter PIN</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 Welcome back, <span className="font-bold text-blue-600">{existingUser?.name}</span>!
@@ -234,14 +223,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="• • • •"
-                className={`w-48 bg-slate-50 dark:bg-slate-950 border-2 ${pinError ? 'border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-800'} rounded-2xl py-4 text-center text-3xl tracking-[0.75rem] font-bold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors placeholder-slate-300 shadow-sm`}
+                className={`w-48 bg-slate-50 dark:bg-slate-950 border-2 ${pinError ? 'border-red-500 dark:border-red-500' : 'border-slate-300 dark:border-slate-800'} rounded-2xl py-4 text-center text-3xl tracking-[0.75rem] font-bold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors placeholder-slate-300 shadow-sm`}
                 required
                 autoFocus
               />
               {errorMessage && <p className="text-red-500 text-[10px] font-bold mt-2 animate-in fade-in">{errorMessage}</p>}
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 px-1">
               <button
                 type="submit"
                 disabled={pin.length < 4 || isLoading}
@@ -250,7 +239,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
                 {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Unlock Account'}
               </button>
               
-              <div className="flex flex-col gap-2 pt-2">
+              <div className="flex flex-col gap-2 pt-2 text-center">
                 <button 
                   type="button" 
                   onClick={handleForgotPin}
@@ -271,87 +260,89 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
         )}
 
         {step === 3 && (
-          <form onSubmit={handleRegistrationSubmit} className="space-y-4 animate-in fade-in slide-in-from-right-4 max-h-[65vh] overflow-y-auto px-1 pr-2 scrollbar-hide text-left">
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Create Profile</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Fill in your details for easy deliveries.</p>
-            </div>
-            
-            <div className="space-y-4 px-0.5">
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Full Name</label>
-                <input 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  placeholder="e.g. John Doe" 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
-                  required 
-                />
+          <form onSubmit={handleRegistrationSubmit} className="animate-in fade-in slide-in-from-right-4 max-h-[65vh] overflow-y-auto scrollbar-hide text-left">
+            <div className="p-1 pr-2 space-y-4">
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Create Profile</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Fill in your details for easy deliveries.</p>
               </div>
-
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Delivery Address</label>
-                <textarea 
-                  value={address} 
-                  onChange={(e) => setAddress(e.target.value)} 
-                  placeholder="Street name, Landmark, Building..." 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm h-20 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
-                  required 
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Pincode</label>
-                <input 
-                  type="tel" 
-                  value={pincode} 
-                  onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} 
-                  placeholder="600001" 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
-                  required 
-                />
-              </div>
-
-              <div className="space-y-3 pt-2">
-                <h4 className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 border-b-2 border-blue-50 dark:border-blue-900/30 pb-1 ml-1">
-                  Security Setup (4-Digit PIN)
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Set PIN</label>
-                    <input 
-                      type="password" 
-                      value={pin} 
-                      onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} 
-                      placeholder="• • • •" 
-                      className={`w-full bg-slate-50 dark:bg-slate-950 border-2 ${pinError ? 'border-red-500' : 'border-slate-300 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center tracking-widest text-slate-900 dark:text-white font-bold placeholder-slate-300 shadow-sm`} 
-                      required 
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Confirm PIN</label>
-                    <input 
-                      type="password" 
-                      value={confirmValue} 
-                      onChange={(e) => setConfirmValue(e.target.value.replace(/\D/g, '').slice(0, 4))} 
-                      placeholder="• • • •" 
-                      className={`w-full bg-slate-50 dark:bg-slate-950 border-2 ${errorMessage.includes('match') ? 'border-red-500' : 'border-slate-300 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center tracking-widest text-slate-900 dark:text-white font-bold placeholder-slate-300 shadow-sm`} 
-                      required 
-                    />
-                  </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    placeholder="e.g. John Doe" 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
+                    required 
+                  />
                 </div>
-                {errorMessage && <p className="text-red-500 text-[10px] font-bold mt-1 text-center">{errorMessage}</p>}
-              </div>
-            </div>
 
-            <button
-              type="submit"
-              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg mt-6 active:scale-95 transition-all"
-            >
-              Complete Registration
-            </button>
-            <button type="button" onClick={() => setStep(1)} className="w-full text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest hover:text-blue-500 py-2">Back</button>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Delivery Address</label>
+                  <textarea 
+                    value={address} 
+                    onChange={(e) => setAddress(e.target.value)} 
+                    placeholder="Street name, Landmark, Building..." 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm h-20 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
+                    required 
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Pincode</label>
+                  <input 
+                    type="tel" 
+                    value={pincode} 
+                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} 
+                    placeholder="600001" 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 dark:text-white font-medium placeholder-slate-400 shadow-sm transition-all" 
+                    required 
+                  />
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 border-b-2 border-blue-50 dark:border-blue-900/30 pb-1 ml-1">
+                    Security Setup (4-Digit PIN)
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Set PIN</label>
+                      <input 
+                        type="password" 
+                        value={pin} 
+                        onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} 
+                        placeholder="• • • •" 
+                        className={`w-full bg-slate-50 dark:bg-slate-950 border-2 ${pinError ? 'border-red-500' : 'border-slate-300 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-center tracking-widest text-slate-900 dark:text-white font-bold placeholder-slate-300 shadow-sm transition-all`} 
+                        required 
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 ml-1">Confirm PIN</label>
+                      <input 
+                        type="password" 
+                        value={confirmValue} 
+                        onChange={(e) => setConfirmValue(e.target.value.replace(/\D/g, '').slice(0, 4))} 
+                        placeholder="• • • •" 
+                        className={`w-full bg-slate-50 dark:bg-slate-950 border-2 ${errorMessage.includes('match') ? 'border-red-500' : 'border-slate-300 dark:border-slate-800'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-center tracking-widest text-slate-900 dark:text-white font-bold placeholder-slate-300 shadow-sm transition-all`} 
+                        required 
+                      />
+                    </div>
+                  </div>
+                  {errorMessage && <p className="text-red-500 text-[10px] font-bold mt-1 text-center">{errorMessage}</p>}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg mt-6 active:scale-95 transition-all"
+              >
+                Complete Registration
+              </button>
+              <button type="button" onClick={() => setStep(1)} className="w-full text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest hover:text-blue-500 py-2">Back</button>
+            </div>
           </form>
         )}
       </div>

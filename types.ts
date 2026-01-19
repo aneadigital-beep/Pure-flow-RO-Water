@@ -62,4 +62,4 @@ export interface AppNotification {
   userMobile?: string;
 }
 
-export type View = 'home' | 'cart' | 'profile' | 'orders' | 'admin' | 'delivery' | 'notifications' | 'assistant';
+export type View = 'home' | 'cart' | 'profile' | 'orders' | 'admin' | 'delivery' | 'notifications' | 'assistant' | 'edit-profile';
