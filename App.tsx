@@ -100,10 +100,15 @@ const App: React.FC = () => {
     });
 
     const unsubProducts = syncCollection(COLLECTIONS.PRODUCTS, (data) => {
+      const initialized = localStorage.getItem('pf_products_initialized');
       if (data && data.length > 0) {
         setProducts(data as Product[]);
-      } else {
+        localStorage.setItem('pf_products_initialized', 'true');
+      } else if (!initialized) {
         INITIAL_PRODUCTS.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
+        localStorage.setItem('pf_products_initialized', 'true');
+      } else {
+        setProducts([]);
       }
     });
 
@@ -196,18 +201,12 @@ const App: React.FC = () => {
     const oldId = normalizeId(user.mobile || user.email || '');
     const newId = normalizeId(updatedUser.mobile || updatedUser.email || '');
     
-    // Update local state
     setUser(updatedUser);
-    
-    // Sync to local DB
     await upsertDocument(COLLECTIONS.USERS, newId, updatedUser);
     if (oldId !== newId) {
       await deleteDocument(COLLECTIONS.USERS, oldId);
     }
-    
-    // Sync to cloud
     await syncUserToSupabase(updatedUser);
-    
     setActiveToast({ title: "Profile Updated", message: "Your changes have been saved successfully." });
     setCurrentView('profile');
   };
@@ -322,22 +321,22 @@ const App: React.FC = () => {
   const unreadCount = relevantNotifications.filter(n => !n.isRead).length;
 
   return (
-    <div className="flex h-full w-full transition-colors duration-300 bg-slate-50 dark:bg-slate-900 overflow-hidden">
+    <div className="flex flex-col md:flex-row h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
       {activeToast && <Toast title={activeToast.title} message={activeToast.message} onClose={() => setActiveToast(null)} />}
       
-      {/* Sidebar Navbar (Fixed Left) */}
+      {/* Navigation - Responsive: Bottom Bar on Mobile, Sidebar on Desktop */}
       <Navbar currentView={currentView} onViewChange={setCurrentView} cartCount={cart.reduce((a, b) => a + b.quantity, 0)} />
 
-      {/* Main Content Area - Offset by Sidebar width */}
-      <div className="flex-1 flex flex-col pl-20 transition-all duration-300 relative h-full">
-        <header className="flex-none z-40 transition-all duration-300 backdrop-blur-md border-b shadow-lg bg-blue-600/95 border-blue-500/30 dark:bg-slate-900/95 dark:border-slate-800 safe-top">
-          <div className="max-w-2xl mx-auto w-full flex justify-between items-center py-3.5 px-4 text-white">
+      {/* Main Content Area - Responsive padding based on nav placement */}
+      <div className="flex-1 flex flex-col relative h-full md:pl-20 pb-20 md:pb-0 transition-all duration-300">
+        <header className="flex-none z-40 transition-all duration-300 backdrop-blur-md border-b shadow-lg bg-blue-600 border-blue-500/30 dark:bg-slate-900/95 dark:border-slate-800 pt-safe">
+          <div className="w-full flex justify-between items-center py-4 px-6 text-white max-w-4xl mx-auto">
             <div className="flex items-center gap-3">
               <div 
                 className="flex items-center gap-2.5 cursor-pointer group" 
                 onClick={() => setCurrentView('home')}
               >
-                <div className="h-8 w-8 bg-white/10 rounded-lg flex items-center justify-center group-hover:bg-white/20 transition-all">
+                <div className="h-9 w-9 bg-white/10 rounded-xl flex items-center justify-center group-hover:bg-white/20 transition-all">
                   <i className="fas fa-droplet text-blue-200 group-hover:scale-110 transition-transform"></i>
                 </div>
                 <div className="flex flex-col -space-y-1 text-left">
@@ -352,33 +351,34 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-3">
               <button 
                 onClick={() => setIsDarkMode(!isDarkMode)} 
                 className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
+                aria-label="Toggle Dark Mode"
               >
                 <i className={`fas ${isDarkMode ? 'fa-sun text-yellow-300' : 'fa-moon'}`}></i>
               </button>
               <button 
                 onClick={() => setCurrentView('notifications')} 
                 className="h-10 w-10 relative flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
+                aria-label="Notifications"
               >
                 <i className="fas fa-bell"></i>
                 {unreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full"></span>}
               </button>
               <div 
-                className="h-9 w-9 rounded-xl border-2 border-white/20 overflow-hidden cursor-pointer" 
+                className="h-9 w-9 rounded-xl border-2 border-white/20 overflow-hidden cursor-pointer hover:border-white/40 transition-colors" 
                 onClick={() => setCurrentView('profile')}
               >
-                {user.avatar ? <img src={user.avatar} className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center text-xs font-black uppercase bg-white/10">{user.name.charAt(0)}</div>}
+                {user.avatar ? <img src={user.avatar} className="h-full w-full object-cover" alt="User" /> : <div className="h-full w-full flex items-center justify-center text-xs font-black uppercase bg-white/10">{user.name.charAt(0)}</div>}
               </div>
             </div>
           </div>
         </header>
 
-        {/* Scrollable Container */}
-        <main className="flex-1 app-scroll-container pb-10 overflow-x-hidden scrollbar-hide">
-          <div className="max-w-2xl mx-auto w-full px-4 pt-6 safe-bottom">
+        <main className="flex-1 overflow-y-auto scrollbar-hide">
+          <div className="max-w-4xl mx-auto w-full px-6 pt-6 pb-12 safe-bottom">
             {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
             {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
             {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} unreadNotifCount={unreadCount} onEditClick={() => setCurrentView('edit-profile')} />}
