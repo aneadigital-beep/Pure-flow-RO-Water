@@ -2,8 +2,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Product, CartItem, View, Order, StatusHistory, AppNotification } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE, DEFAULT_UPI_ID } from './constants';
-import { COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy, getTownId, setTownId } from './firebase';
-import { supabase, syncOrderToSupabase, fetchOrdersFromSupabase, syncUserToSupabase, fetchUsersFromSupabase, subscribeToTable } from './supabase';
+import { COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy } from './firebase';
+import { 
+  supabase, 
+  syncOrderToSupabase, 
+  fetchOrdersFromSupabase, 
+  syncUserToSupabase, 
+  fetchUsersFromSupabase, 
+  subscribeToTable,
+  syncProductToSupabase,
+  fetchProductsFromSupabase,
+  deleteProductFromSupabase
+} from './supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Cart from './components/Cart';
@@ -28,16 +38,23 @@ const App: React.FC = () => {
   });
   
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('pureflow_dark_mode');
-    return saved === 'true';
+    try {
+      return localStorage.getItem('pureflow_dark_mode') === 'true';
+    } catch (e) {
+      return false;
+    }
   });
 
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-    const saved = localStorage.getItem('pureflow_notifications');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('pureflow_notifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
   });
   const [deliveryFee, setDeliveryFee] = useState<number>(DEFAULT_DELIVERY_FEE);
   const [upiId, setUpiId] = useState<string>(DEFAULT_UPI_ID);
@@ -50,11 +67,15 @@ const App: React.FC = () => {
   const normalizeId = (id: string) => id.replace(/\D/g, '').trim();
 
   useEffect(() => {
-    localStorage.setItem('pureflow_user', JSON.stringify(user));
+    try {
+      localStorage.setItem('pureflow_user', JSON.stringify(user));
+    } catch (e) {}
   }, [user]);
 
   useEffect(() => {
-    localStorage.setItem('pureflow_notifications', JSON.stringify(notifications));
+    try {
+      localStorage.setItem('pureflow_notifications', JSON.stringify(notifications));
+    } catch (e) {}
   }, [notifications]);
 
   useEffect(() => {
@@ -63,11 +84,13 @@ const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('pureflow_dark_mode', String(isDarkMode));
+    try {
+      localStorage.setItem('pureflow_dark_mode', String(isDarkMode));
+    } catch (e) {}
   }, [isDarkMode]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setAppLoading(false), 2500);
+    const splashTimer = setTimeout(() => setAppLoading(false), 2500);
 
     const loadCloudData = async () => {
       try {
@@ -76,6 +99,7 @@ const App: React.FC = () => {
           setIsCloudSynced(true);
           cloudOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
         }
+
         const cloudUsers = await fetchUsersFromSupabase();
         if (cloudUsers) {
           cloudUsers.forEach(u => {
@@ -83,9 +107,14 @@ const App: React.FC = () => {
             if (id) upsertDocument(COLLECTIONS.USERS, id, u);
           });
         }
+
+        const cloudProducts = await fetchProductsFromSupabase();
+        if (cloudProducts && cloudProducts.length > 0) {
+          cloudProducts.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
+          localStorage.setItem('pf_products_initialized', 'true');
+        }
       } catch (e) {
         setIsCloudSynced(false);
-        console.warn("Cloud sync failed.");
       }
     };
     loadCloudData();
@@ -118,7 +147,7 @@ const App: React.FC = () => {
       if (upiSetting) setUpiId(upiSetting.value);
     });
 
-    const orderSubscription = subscribeToTable('orders', (payload) => {
+    const orderChannel = subscribeToTable('orders', (payload) => {
       if (payload.new) {
         upsertDocument(COLLECTIONS.ORDERS, payload.new.id, payload.new);
         if (user && payload.eventType === 'UPDATE') {
@@ -134,12 +163,12 @@ const App: React.FC = () => {
     });
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(splashTimer);
       unsubOrders();
       unsubUsers();
       unsubProducts();
       unsubSettings();
-      orderSubscription.unsubscribe();
+      supabase.removeChannel(orderChannel);
     };
   }, [user]);
 
@@ -226,10 +255,7 @@ const App: React.FC = () => {
     };
 
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
-    const synced = await syncOrderToSupabase(newOrder);
-    if (!synced) {
-      setActiveToast({ title: "Local Saved", message: "Order placed locally. Will sync when cloud is reachable." });
-    }
+    await syncOrderToSupabase(newOrder);
 
     setCart([]);
     setCurrentView('orders');
@@ -264,18 +290,29 @@ const App: React.FC = () => {
   }, [registeredUsers, allOrders, addNotification]);
 
   const handleAddProduct = useCallback(async (product: Product) => {
-    await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
-    setActiveToast({ title: "Product Added", message: `${product.name} is now in catalog.` });
+    try {
+      await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
+      await syncProductToSupabase(product);
+      setActiveToast({ title: "Product Added", message: `${product.name} synced.` });
+    } catch (e) {
+      setActiveToast({ title: "Sync Limit", message: "Storage full. Image compressed but not saved locally." });
+    }
   }, []);
 
   const handleUpdateProduct = useCallback(async (product: Product) => {
-    await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
-    setActiveToast({ title: "Product Updated", message: `${product.name} changes saved.` });
+    try {
+      await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
+      await syncProductToSupabase(product);
+      setActiveToast({ title: "Product Updated", message: `${product.name} synced.` });
+    } catch (e) {
+      setActiveToast({ title: "Sync Limit", message: "Storage full. Relying on Cloud Sync." });
+    }
   }, []);
 
   const handleDeleteProduct = useCallback(async (id: string) => {
     await deleteDocument(COLLECTIONS.PRODUCTS, id);
-    setActiveToast({ title: "Product Removed", message: "Item deleted from catalog." });
+    await deleteProductFromSupabase(id);
+    setActiveToast({ title: "Product Removed", message: "Item deleted." });
   }, []);
 
   const handleAddStaff = useCallback(async (mobile: string, name: string) => {
@@ -284,7 +321,7 @@ const App: React.FC = () => {
     const newStaff: User = existing ? { ...existing as User, isDeliveryBoy: true, name } : { mobile, name, address: '', pincode: '', isLoggedIn: false, isDeliveryBoy: true };
     await upsertDocument(COLLECTIONS.USERS, id, newStaff);
     await syncUserToSupabase(newStaff);
-    setActiveToast({ title: "Staff Added", message: `${name} registered as staff.` });
+    setActiveToast({ title: "Staff Added", message: `${name} registered.` });
   }, []);
 
   const handleUpdateStaffRole = useCallback(async (mobile: string, isDelivery: boolean) => {
@@ -307,61 +344,32 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col md:flex-row h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
       {activeToast && <Toast title={activeToast.title} message={activeToast.message} onClose={() => setActiveToast(null)} />}
-      
-      {/* Auto-Fit Responsive Navigation */}
       <Navbar currentView={currentView} onViewChange={setCurrentView} cartCount={cart.reduce((a, b) => a + b.quantity, 0)} />
-
-      {/* Main Adaptive Shell */}
       <div className="flex-1 flex flex-col relative h-full md:pl-20 pb-20 md:pb-0 transition-all duration-300">
-        <header className="flex-none z-40 transition-all duration-300 backdrop-blur-md border-b shadow-lg bg-blue-600 border-blue-500/30 dark:bg-slate-900/95 dark:border-slate-800 pt-safe">
+        <header className="flex-none z-40 backdrop-blur-md border-b shadow-lg bg-blue-600 border-blue-500/30 dark:bg-slate-900/95 dark:border-slate-800 pt-safe">
           <div className="w-full flex justify-between items-center py-4 px-6 text-white max-w-4xl mx-auto">
-            <div className="flex items-center gap-3">
-              <div 
-                className="flex items-center gap-2.5 cursor-pointer group" 
-                onClick={() => setCurrentView('home')}
-              >
-                <div className="h-9 w-9 bg-white/10 rounded-xl flex items-center justify-center group-hover:bg-white/20 transition-all">
-                  <i className="fas fa-droplet text-blue-200 group-hover:scale-110 transition-transform"></i>
-                </div>
+            <div className="flex items-center gap-3" onClick={() => setCurrentView('home')}>
+                <div className="h-9 w-9 bg-white/10 rounded-xl flex items-center justify-center"><i className="fas fa-droplet text-blue-200"></i></div>
                 <div className="flex flex-col -space-y-1 text-left">
                   <h1 className="text-lg font-black tracking-tight uppercase leading-none">{TOWN_NAME}</h1>
                   <div className="flex items-center gap-1.5">
                     <div className={`h-1.5 w-1.5 rounded-full ${isCloudSynced ? 'bg-green-400' : 'bg-red-400'} animate-pulse`}></div>
-                    <span className="text-[8px] font-bold uppercase tracking-widest opacity-60">
-                      {isCloudSynced ? 'Cloud' : 'Local'}
-                    </span>
+                    <span className="text-[8px] font-bold uppercase tracking-widest opacity-60">{isCloudSynced ? 'Cloud' : 'Local'}</span>
                   </div>
                 </div>
-              </div>
             </div>
-
             <div className="flex items-center gap-3">
-              <button 
-                onClick={() => setIsDarkMode(!isDarkMode)} 
-                className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
-                aria-label="Toggle Dark Mode"
-              >
-                <i className={`fas ${isDarkMode ? 'fa-sun text-yellow-300' : 'fa-moon'}`}></i>
-              </button>
-              <button 
-                onClick={() => setCurrentView('notifications')} 
-                className="h-10 w-10 relative flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"
-                aria-label="Notifications"
-              >
+              <button onClick={() => setIsDarkMode(!isDarkMode)} className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-white/10"><i className={`fas ${isDarkMode ? 'fa-sun text-yellow-300' : 'fa-moon'}`}></i></button>
+              <button onClick={() => setCurrentView('notifications')} className="h-10 w-10 relative flex items-center justify-center rounded-xl hover:bg-white/10">
                 <i className="fas fa-bell"></i>
                 {unreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full"></span>}
               </button>
-              <div 
-                className="h-9 w-9 rounded-xl border-2 border-white/20 overflow-hidden cursor-pointer hover:border-white/40 transition-colors" 
-                onClick={() => setCurrentView('profile')}
-              >
+              <div className="h-9 w-9 rounded-xl border-2 border-white/20 overflow-hidden cursor-pointer" onClick={() => setCurrentView('profile')}>
                 {user.avatar ? <img src={user.avatar} className="h-full w-full object-cover" alt="User" /> : <div className="h-full w-full flex items-center justify-center text-xs font-black uppercase bg-white/10">{user.name.charAt(0)}</div>}
               </div>
             </div>
           </div>
         </header>
-
-        {/* Content Container with Max Width Centering */}
         <main className="flex-1 overflow-y-auto scrollbar-hide">
           <div className="max-w-4xl mx-auto w-full px-4 md:px-8 pt-6 pb-12 safe-bottom">
             {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
@@ -370,27 +378,7 @@ const App: React.FC = () => {
             {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} />}
             {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
             {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile || '') === normalizeId(user.mobile || user.email || ''))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
-            {currentView === 'admin' && (
-              <Admin 
-                products={products} 
-                orders={allOrders} 
-                onUpdateStatus={updateOrderStatus} 
-                registeredUsers={registeredUsers} 
-                upiId={upiId} 
-                deliveryFee={deliveryFee} 
-                onUpdateDeliveryFee={(f) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f })} 
-                onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })} 
-                onAssignOrder={assignOrder} 
-                onAddProduct={handleAddProduct}
-                onUpdateProduct={handleUpdateProduct}
-                onDeleteProduct={handleDeleteProduct}
-                onAddStaff={handleAddStaff}
-                onUpdateStaffRole={handleUpdateStaffRole}
-                onUpdateAdminRole={handleUpdateAdminRole}
-                onBack={() => setCurrentView('profile')} 
-                isCloudSynced={isCloudSynced} 
-              />
-            )}
+            {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} onUpdateDeliveryFee={(f) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f })} onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })} onAssignOrder={assignOrder} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} onAddStaff={handleAddStaff} onUpdateStaffRole={handleUpdateStaffRole} onUpdateAdminRole={handleUpdateAdminRole} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
             {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
           </div>
         </main>

@@ -17,7 +17,7 @@ export const PRODUCTS: Product[] = [
     description: 'Perfect for small families. 2 cans delivered every week.',
     price: 250,
     unit: 'Month',
-    image: 'https://images.unsplash.com/photo-1560067174-c5a3a8f37060?auto=format&fit=crop&q=80&w=400',
+    image: 'https://images.unsplash.com/photo-1559839914-17aae19cea9e?auto=format&fit=crop&q=80&w=800',
     category: 'subscription'
   },
   {
@@ -26,7 +26,7 @@ export const PRODUCTS: Product[] = [
     description: 'Never run out. One 20L can delivered daily to your home.',
     price: 900,
     unit: 'Month',
-    image: 'https://images.unsplash.com/photo-1516733968668-dbdce39c46ef?auto=format&fit=crop&q=80&w=400',
+    image: 'https://images.unsplash.com/photo-1615461065929-4f8ffed6ca40?auto=format&fit=crop&q=80&w=800',
     category: 'subscription'
   },
   {

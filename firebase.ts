@@ -1,8 +1,7 @@
 
 /**
  * Persistence Engine (Cloud Sync Simulation)
- * Note: LocalStorage is device-specific. To sync across different phones, 
- * use the Export/Import "Sync Package" feature in the Admin panel.
+ * Provides resilience against LocalStorage failures.
  */
 
 export const COLLECTIONS = {
@@ -16,58 +15,35 @@ let townId = localStorage.getItem('pureflow_town_id') || '';
 
 export const setTownId = (id: string) => {
   townId = id;
-  localStorage.setItem('pureflow_town_id', id);
+  try {
+    localStorage.setItem('pureflow_town_id', id);
+  } catch (e) {
+    console.error("Failed to save townId to storage");
+  }
   window.location.reload();
 };
 
 export const getTownId = () => townId;
 
-/**
- * DATABASE INSPECTOR: Get all data for the current town
- */
-export const getFullDatabaseExport = () => {
-  const db: any = {};
-  Object.values(COLLECTIONS).forEach(col => {
-    db[col] = getLocalData(col);
-  });
-  return JSON.stringify({
-    townId,
-    timestamp: new Date().toISOString(),
-    payload: db
-  });
-};
-
-/**
- * DATABASE RESTORE: Overwrite local data with a sync package
- */
-export const importDatabasePackage = (jsonString: string) => {
+const getLocalData = (collectionName: string): any[] => {
   try {
-    const parsed = JSON.parse(jsonString);
-    if (!parsed.payload) throw new Error("Invalid Sync Package");
-    
-    Object.keys(parsed.payload).forEach(col => {
-      localStorage.setItem(`pf_${col}`, JSON.stringify(parsed.payload[col]));
-    });
-    
-    if (parsed.townId) {
-      localStorage.setItem('pureflow_town_id', parsed.townId);
-    }
-    
-    return true;
+    const data = localStorage.getItem(`pf_${collectionName}`);
+    return data ? JSON.parse(data) : [];
   } catch (e) {
-    console.error("Import failed:", e);
-    return false;
+    console.error(`Failed to parse local data for ${collectionName}. Data might be corrupted.`);
+    return [];
   }
 };
 
-const getLocalData = (collectionName: string): any[] => {
-  const data = localStorage.getItem(`pf_${collectionName}`);
-  return data ? JSON.parse(data) : [];
-};
-
 const setLocalData = (collectionName: string, data: any[]) => {
-  localStorage.setItem(`pf_${collectionName}`, JSON.stringify(data));
-  window.dispatchEvent(new CustomEvent(`pf_update_${collectionName}`, { detail: data }));
+  try {
+    localStorage.setItem(`pf_${collectionName}`, JSON.stringify(data));
+    window.dispatchEvent(new CustomEvent(`pf_update_${collectionName}`, { detail: data }));
+  } catch (e) {
+    console.warn(`LocalStorage is FULL. Data for ${collectionName} was not saved locally. Relying on Cloud Sync.`);
+    // We still dispatch the event so the UI updates, even if persistence failed
+    window.dispatchEvent(new CustomEvent(`pf_update_${collectionName}`, { detail: data }));
+  }
 };
 
 export const orderBy = (field: string, direction: 'asc' | 'desc' = 'asc') => {
@@ -80,17 +56,21 @@ export const syncCollection = (
   constraints: any[] = []
 ) => {
   const loadAndEmit = () => {
-    let data = getLocalData(collectionName);
-    const orderConstraint = constraints.find(c => c && c.type === 'order');
-    if (orderConstraint) {
-      data.sort((a, b) => {
-        const valA = a[orderConstraint.field];
-        const valB = b[orderConstraint.field];
-        if (orderConstraint.direction === 'asc') return valA > valB ? 1 : -1;
-        return valA < valB ? 1 : -1;
-      });
+    try {
+      let data = getLocalData(collectionName);
+      const orderConstraint = constraints.find(c => c && c.type === 'order');
+      if (orderConstraint) {
+        data.sort((a, b) => {
+          const valA = a[orderConstraint.field];
+          const valB = b[orderConstraint.field];
+          if (orderConstraint.direction === 'asc') return valA > valB ? 1 : -1;
+          return valA < valB ? 1 : -1;
+        });
+      }
+      callback(data);
+    } catch (e) {
+      console.error(`Error in syncCollection for ${collectionName}`, e);
     }
-    callback(data);
   };
 
   loadAndEmit();
