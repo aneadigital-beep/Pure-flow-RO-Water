@@ -43,20 +43,37 @@ const Admin: React.FC<AdminProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'Dashboard' | 'Orders' | 'Inventory' | 'Staff' | 'Settings'>('Dashboard');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  
   const [tempStatus, setTempStatus] = useState<Order['status']>('Pending');
   const [tempStaff, setTempStaff] = useState<string | undefined>(undefined);
   const [adminNote, setAdminNote] = useState('');
+
   const [settingsForm, setSettingsForm] = useState({ fee: deliveryFee, upi: upiId });
   const [staffSearch, setStaffSearch] = useState('');
+  
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [prodForm, setProdForm] = useState<Partial<Product>>({
     name: '', description: '', price: 0, unit: 'Can', image: '', category: 'can'
   });
+
+  // Cropper State
+  const [showCropper, setShowCropper] = useState(false);
+  const [rawImage, setRawImage] = useState<string | null>(null);
+  const [cropState, setCropState] = useState({ zoom: 1, x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
   const [isAddingStaff, setIsAddingStaff] = useState(false);
   const [staffForm, setStaffForm] = useState({ name: '', mobile: '' });
   const [isProcessingImg, setIsProcessingImg] = useState(false);
+  
+  // Deletion tracking
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cropperRef = useRef<HTMLDivElement>(null);
 
   const selectedOrder = useMemo(() => orders.find(o => o.id === selectedOrderId), [orders, selectedOrderId]);
 
@@ -96,8 +113,24 @@ const Admin: React.FC<AdminProps> = ({
     });
   }, [registeredUsers, staffSearch]);
 
-  const processImage = (dataUrl: string) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setRawImage(reader.result as string);
+        setCropState({ zoom: 1, x: 0, y: 0 });
+        setShowCropper(true);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const finalizeCrop = () => {
+    if (!rawImage) return;
     setIsProcessingImg(true);
+    setShowCropper(false);
+
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
@@ -105,33 +138,33 @@ const Admin: React.FC<AdminProps> = ({
       canvas.width = 800;
       canvas.height = 800;
       const ctx = canvas.getContext('2d');
+      
       if (ctx) {
-        const size = Math.min(img.width, img.height);
-        const sourceX = (img.width - size) / 2;
-        const sourceY = (img.height - size) / 2;
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, 800, 800);
-        ctx.drawImage(img, sourceX, sourceY, size, size, 0, 0, 800, 800);
-        // Reduced to 60% quality to ensure it fits in LocalStorage
-        const processedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+
+        const baseSize = Math.min(img.width, img.height);
+        const cropWidth = baseSize / cropState.zoom;
+        const cropHeight = baseSize / cropState.zoom;
+
+        const centerX = img.width / 2;
+        const centerY = img.height / 2;
+        
+        const scaleFactor = img.width / 300; 
+        const offsetX = -(cropState.x * scaleFactor);
+        const offsetY = -(cropState.y * scaleFactor);
+
+        const sx = centerX - (cropWidth / 2) + offsetX;
+        const sy = centerY - (cropHeight / 2) + offsetY;
+
+        ctx.drawImage(img, sx, sy, cropWidth, cropHeight, 0, 0, 800, 800);
+        const processedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
         setProdForm(prev => ({ ...prev, image: processedDataUrl }));
       }
       setIsProcessingImg(false);
+      setRawImage(null);
     };
-    img.onerror = () => {
-      setIsProcessingImg(false);
-      alert("Failed to process image.");
-    };
-    img.src = dataUrl;
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => processImage(reader.result as string);
-      reader.readAsDataURL(file);
-    }
+    img.src = rawImage;
   };
 
   const handleUpdateTask = () => {
@@ -152,6 +185,17 @@ const Admin: React.FC<AdminProps> = ({
     }
   };
 
+  const handleDeleteClick = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  const handleConfirmDelete = async (id: string) => {
+    setIsDeletingId(id);
+    await onDeleteProduct(id);
+    setIsDeletingId(null);
+    setDeleteConfirmId(null);
+  };
+
   const handleAddStaffSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (staffForm.mobile.length === 10 && staffForm.name) {
@@ -161,23 +205,110 @@ const Admin: React.FC<AdminProps> = ({
     }
   };
 
+  const startDrag = (e: React.MouseEvent | React.TouchEvent) => {
+    setIsDragging(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    setDragStart({ x: clientX - cropState.x, y: clientY - cropState.y });
+  };
+
+  const onDrag = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDragging) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    setCropState(prev => ({ ...prev, x: clientX - dragStart.x, y: clientY - dragStart.y }));
+  };
+
+  if (showCropper && rawImage) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95">
+        <div className="text-center mb-6">
+          <h3 className="text-white font-black uppercase text-xs tracking-widest mb-1">Crop Image (1:1)</h3>
+          <p className="text-white/40 text-[10px]">Drag to move • Slider to zoom</p>
+        </div>
+
+        <div 
+          ref={cropperRef}
+          className="relative w-72 h-72 bg-slate-900 overflow-hidden rounded-2xl border-4 border-white/10 cursor-move"
+          onMouseDown={startDrag}
+          onMouseMove={onDrag}
+          onMouseUp={() => setIsDragging(false)}
+          onMouseLeave={() => setIsDragging(false)}
+          onTouchStart={startDrag}
+          onTouchMove={onDrag}
+          onTouchEnd={() => setIsDragging(false)}
+        >
+          <img 
+            src={rawImage} 
+            className="absolute pointer-events-none select-none max-w-none"
+            style={{ 
+              transform: `translate(calc(-50% + ${cropState.x}px), calc(-50% + ${cropState.y}px)) scale(${cropState.zoom})`,
+              left: '50%',
+              top: '50%',
+              height: '100%'
+            }} 
+            alt="To crop" 
+          />
+          <div className="absolute inset-0 border-2 border-blue-500 rounded-lg pointer-events-none shadow-[0_0_0_1000px_rgba(0,0,0,0.5)]"></div>
+          <div className="absolute top-1/2 left-0 right-0 border-t border-white/20 pointer-events-none"></div>
+          <div className="absolute top-0 bottom-0 left-1/2 border-l border-white/20 pointer-events-none"></div>
+        </div>
+
+        <div className="w-full max-w-[280px] mt-8 space-y-6">
+          <div className="flex items-center gap-4">
+            <i className="fas fa-minus text-white/30 text-[10px]"></i>
+            <input 
+              type="range" 
+              min="1" 
+              max="4" 
+              step="0.01" 
+              value={cropState.zoom} 
+              onChange={e => setCropState(prev => ({ ...prev, zoom: parseFloat(e.target.value) }))}
+              className="flex-1 accent-blue-500 h-1.5 bg-white/10 rounded-full appearance-none outline-none"
+            />
+            <i className="fas fa-plus text-white/30 text-[10px]"></i>
+          </div>
+
+          <div className="flex gap-3">
+            <button 
+              onClick={() => { setShowCropper(false); setRawImage(null); }}
+              className="flex-1 bg-white/5 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={finalizeCrop}
+              className="flex-1 bg-blue-600 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-500/20"
+            >
+              Confirm Crop
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (selectedOrder) {
     return (
       <div className="space-y-6 pb-10 text-left px-1">
         <div className="flex items-center gap-4">
-          <button onClick={() => setSelectedOrderId(null)} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-gray-600 dark:text-slate-300"><i className="fas fa-arrow-left"></i></button>
+          <button onClick={() => setSelectedOrderId(null)} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-gray-600 dark:text-slate-300 transition-transform active:scale-90">
+            <i className="fas fa-arrow-left"></i>
+          </button>
           <h2 className="text-xl font-bold">Order Detail</h2>
         </div>
+        
         <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 space-y-6">
            <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Customer</p>
               <h3 className="font-black text-slate-800 dark:text-white text-lg">{selectedOrder.userName}</h3>
               <p className="text-sm text-slate-500">{selectedOrder.userMobile}</p>
            </div>
+           
            <div className="space-y-4">
                 <div>
                   <label className="text-[10px] text-blue-600 font-black uppercase mb-1.5 block">Status</label>
-                  <select value={tempStatus} onChange={(e) => setTempStatus(e.target.value as Order['status'])} className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold">
+                  <select value={tempStatus} onChange={(e) => setTempStatus(e.target.value as Order['status'])} className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all outline-none">
                     <option value="Pending">Pending</option>
                     <option value="Processing">Processing</option>
                     <option value="Out for Delivery">Out for Delivery</option>
@@ -185,18 +316,30 @@ const Admin: React.FC<AdminProps> = ({
                     <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="text-[10px] text-blue-600 font-black uppercase mb-1.5 block">Assign Partner</label>
-                  <select value={tempStaff || ''} onChange={(e) => setTempStaff(e.target.value || undefined)} className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold">
+                  <select value={tempStaff || ''} onChange={(e) => setTempStaff(e.target.value || undefined)} className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all outline-none">
                     <option value="">-- No Staff --</option>
                     {deliveryBoys.map(db => (
                       <option key={db.mobile} value={db.mobile}>{db.name}</option>
                     ))}
                   </select>
                 </div>
+                
+                <div>
+                  <label className="text-[10px] text-slate-400 font-black uppercase mb-1.5 block">Admin Note</label>
+                  <textarea 
+                    value={adminNote}
+                    onChange={(e) => setAdminNote(e.target.value)}
+                    placeholder="Internal comments..."
+                    className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none h-20 resize-none transition-all shadow-sm"
+                  />
+                </div>
            </div>
         </div>
-        <button onClick={handleUpdateTask} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl">Update Task</button>
+
+        <button onClick={handleUpdateTask} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Update Task</button>
       </div>
     );
   }
@@ -205,16 +348,17 @@ const Admin: React.FC<AdminProps> = ({
     <div className="space-y-6 pb-20 relative text-left px-1">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Business Control</h2>
-        <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center"><i className="fas fa-arrow-left"></i></button>
+        <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 transition-transform active:scale-90"><i className="fas fa-arrow-left"></i></button>
       </div>
+
       <div className="flex p-1 bg-slate-100 dark:bg-slate-950 rounded-2xl overflow-x-auto scrollbar-hide">
         {(['Dashboard', 'Orders', 'Inventory', 'Staff', 'Settings'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[10px] font-black uppercase tracking-wider ${activeTab === tab ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500'}`}>{tab}</button>
+          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${activeTab === tab ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500'}`}>{tab}</button>
         ))}
       </div>
 
       {activeTab === 'Dashboard' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
             <p className="text-2xl font-black text-slate-900 dark:text-white">₹{stats.revenue}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase">Revenue</p>
@@ -227,13 +371,13 @@ const Admin: React.FC<AdminProps> = ({
       )}
 
       {activeTab === 'Orders' && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-in fade-in">
           {orders.map(o => (
-            <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border flex flex-col cursor-pointer border-slate-100 dark:border-slate-700">
+            <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border flex flex-col cursor-pointer transition-colors shadow-sm border-slate-100 dark:border-slate-700 hover:border-blue-200">
               <div className="flex justify-between items-center">
                 <div>
                   <p className="font-bold text-sm">{o.userName}</p>
-                  <p className="text-[10px] text-slate-400">{o.date}</p>
+                  <p className="text-[10px] text-slate-400 font-bold">{o.date} • {o.id}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-black text-blue-600">₹{o.total}</p>
@@ -246,53 +390,171 @@ const Admin: React.FC<AdminProps> = ({
       )}
 
       {activeTab === 'Inventory' && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-in fade-in">
           {isAddingNew || editingProduct ? (
-            <form onSubmit={handleSaveProduct} className="bg-white dark:bg-slate-800 p-6 rounded-3xl space-y-4">
-               <div className="flex items-center justify-between mb-2">
+            <form onSubmit={handleSaveProduct} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-4 text-left px-1">
+              <div className="flex items-center justify-between mb-2">
                 <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest">{editingProduct ? 'Edit Product' : 'Add New Item'}</h3>
-                <button type="button" onClick={() => { setIsAddingNew(false); setEditingProduct(null); }} className="text-slate-400"><i className="fas fa-times"></i></button>
+                <button type="button" onClick={() => { setIsAddingNew(false); setEditingProduct(null); }} className="text-slate-400 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
               </div>
+
               <div className="flex gap-4">
-                <div className="h-24 w-24 bg-slate-50 dark:bg-slate-900 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center relative overflow-hidden shrink-0">
+                <div className="h-24 w-24 bg-slate-50 dark:bg-slate-900 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center relative overflow-hidden shrink-0 group">
                   {prodForm.image ? (
-                    <img src={prodForm.image} className={`h-full w-full object-cover ${isProcessingImg ? 'opacity-30' : ''}`} alt="" />
-                  ) : <i className="fas fa-image text-slate-300 text-xl"></i>}
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><i className="fas fa-camera"></i></button>
+                    <img src={prodForm.image} className={`h-full w-full object-cover transition-opacity ${isProcessingImg ? 'opacity-30' : 'opacity-100'}`} alt="" />
+                  ) : (
+                    <i className="fas fa-image text-slate-300 text-xl"></i>
+                  )}
+                  
+                  {isProcessingImg && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-[2px]">
+                      <i className="fas fa-circle-notch animate-spin text-blue-600"></i>
+                    </div>
+                  )}
+
+                  <button type="button" onClick={() => !isProcessingImg && fileInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <i className="fas fa-camera"></i>
+                  </button>
                 </div>
-                <div className="flex-1 space-y-2">
-                  <input type="text" placeholder="Product Name" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 rounded-xl px-4 py-3 text-sm font-bold" required />
-                  <input type="number" placeholder="Price" value={prodForm.price} onChange={e => setProdForm({...prodForm, price: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-900 border-2 rounded-xl px-4 py-3 text-sm font-bold" required />
+                <div className="flex-1 space-y-3">
+                  <input type="text" placeholder="Product Name" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
+                  <div className="flex gap-2">
+                    <input type="number" placeholder="Price" value={prodForm.price} onChange={e => setProdForm({...prodForm, price: Number(e.target.value)})} className="flex-1 bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
+                    <input type="text" placeholder="Unit" value={prodForm.unit} onChange={e => setProdForm({...prodForm, unit: e.target.value})} className="w-20 bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
+                  </div>
                 </div>
               </div>
+              
               <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-              <button type="submit" disabled={isProcessingImg} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest disabled:opacity-50">
-                {isProcessingImg ? 'Processing...' : 'Save Product'}
+
+              <button 
+                type="submit" 
+                disabled={isProcessingImg}
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isProcessingImg ? 'Optimizing (800x800)...' : 'Save Product'}
               </button>
             </form>
           ) : (
             <>
-              {products.map(p => (
-                <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex gap-4">
-                  <img src={p.image} className="h-16 w-16 rounded-xl object-cover shrink-0" alt="" />
-                  <div className="flex-1">
-                     <div className="flex justify-between items-start">
-                       <div>
-                         <h4 className="font-bold text-sm">{p.name}</h4>
-                         <p className="text-[10px] text-slate-400 font-bold uppercase">₹{p.price}/{p.unit}</p>
+              <div className="grid grid-cols-1 gap-4">
+                {products.map(p => (
+                  <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex gap-4 text-left relative overflow-hidden">
+                    <img src={p.image} className="h-16 w-16 rounded-xl object-cover shrink-0" alt="" />
+                    <div className="flex-1">
+                       <div className="flex justify-between items-start">
+                         <div>
+                           <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{p.name}</h4>
+                           <p className="text-[10px] text-slate-400 font-bold uppercase">₹{p.price}/{p.unit}</p>
+                         </div>
+                         
+                         <div className="flex items-center gap-1">
+                            {deleteConfirmId === p.id ? (
+                               <div className="flex gap-1 animate-in slide-in-from-right-2">
+                                  <button 
+                                    onClick={() => handleConfirmDelete(p.id)}
+                                    disabled={isDeletingId === p.id}
+                                    className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm active:scale-90 transition-all"
+                                  >
+                                    {isDeletingId === p.id ? <i className="fas fa-circle-notch animate-spin"></i> : 'Confirm?'}
+                                  </button>
+                                  <button 
+                                    onClick={() => setDeleteConfirmId(null)}
+                                    className="bg-slate-100 dark:bg-slate-700 text-slate-500 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest"
+                                  >
+                                    No
+                                  </button>
+                               </div>
+                            ) : (
+                               <>
+                                  <button onClick={() => setEditingProduct(p)} className="h-9 w-9 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors flex items-center justify-center"><i className="fas fa-edit text-xs"></i></button>
+                                  <button onClick={() => handleDeleteClick(p.id)} className="h-9 w-9 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors flex items-center justify-center"><i className="fas fa-trash-can text-xs"></i></button>
+                               </>
+                            )}
+                         </div>
                        </div>
-                       <div className="flex gap-1">
-                          <button onClick={() => setEditingProduct(p)} className="h-8 w-8 text-blue-500"><i className="fas fa-edit text-xs"></i></button>
-                          <button onClick={() => { if(confirm('Delete?')) onDeleteProduct(p.id) }} className="h-8 w-8 text-red-500"><i className="fas fa-trash-can text-xs"></i></button>
-                       </div>
-                     </div>
+                    </div>
                   </div>
-                </div>
-              ))}
-              <button onClick={() => setIsAddingNew(true)} className="fixed bottom-24 right-6 h-14 w-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center z-50"><i className="fas fa-plus text-lg"></i></button>
+                ))}
+              </div>
+              <button onClick={() => setIsAddingNew(true)} className="fixed bottom-24 right-6 h-14 w-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center animate-in zoom-in-50 z-50 active:scale-90 transition-transform"><i className="fas fa-plus text-lg"></i></button>
             </>
           )}
         </div>
+      )}
+
+      {activeTab === 'Staff' && (
+        <div className="space-y-4 animate-in fade-in">
+          {isAddingStaff ? (
+             <form onSubmit={handleAddStaffSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-4 text-left px-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest">Add New Staff</h3>
+                  <button type="button" onClick={() => setIsAddingStaff(false)} className="text-slate-400 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
+                </div>
+                <div className="space-y-3">
+                  <input type="text" placeholder="Staff Name" value={staffForm.name} onChange={e => setStaffForm({...staffForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
+                  <input type="tel" placeholder="Mobile Number (10 digits)" value={staffForm.mobile} onChange={e => setStaffForm({...staffForm, mobile: e.target.value.replace(/\D/g, '').slice(0, 10)})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
+                  <button type="submit" className="w-full bg-green-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Register Staff</button>
+                </div>
+             </form>
+          ) : (
+            <div className="space-y-4 text-left px-1">
+              <div className="relative">
+                <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" placeholder="Search team..." value={staffSearch} onChange={e => setStaffSearch(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" />
+              </div>
+
+              <div className="space-y-3">
+                {filteredStaff.map(s => (
+                  <div key={s.mobile || s.email} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 bg-slate-100 dark:bg-slate-900 rounded-full flex items-center justify-center font-black text-blue-600">{s.name.charAt(0)}</div>
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">{s.name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">{s.mobile || s.email}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                       <button onClick={() => onUpdateStaffRole(s.mobile || s.email || '', !s.isDeliveryBoy)} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider border-2 transition-all ${s.isDeliveryBoy ? 'bg-green-100 border-green-200 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-400'}`}>
+                         <i className="fas fa-truck-fast mr-2"></i> {s.isDeliveryBoy ? 'Staff Active' : 'Make Staff'}
+                       </button>
+                       <button onClick={() => onUpdateAdminRole(s.mobile || s.email || '', !s.isAdmin)} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider border-2 transition-all ${s.isAdmin ? 'bg-yellow-100 border-yellow-200 text-yellow-700' : 'bg-slate-50 border-slate-300 text-slate-400'}`}>
+                         <i className="fas fa-crown mr-2"></i> {s.isAdmin ? 'Admin' : 'Make Admin'}
+                       </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setIsAddingStaff(true)} className="w-full bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-dashed border-blue-200 dark:border-blue-900/50 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors active:scale-95">
+                <i className="fas fa-user-plus"></i> Add New Team Member
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'Settings' && (
+        <form onSubmit={(e) => { e.preventDefault(); onUpdateDeliveryFee(settingsForm.fee); onUpdateUpiId(settingsForm.upi); alert('Updated!'); }} className="space-y-6 animate-in fade-in text-left px-1">
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-6">
+              <div>
+                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block">Global Delivery Fee</label>
+                 <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">₹</span>
+                    <input type="number" value={settingsForm.fee} onChange={e => setSettingsForm({...settingsForm, fee: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl py-4 pl-10 pr-4 font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" />
+                 </div>
+              </div>
+
+              <div>
+                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block">Business UPI ID</label>
+                 <input type="text" value={settingsForm.upi} onChange={e => setSettingsForm({...settingsForm, upi: e.target.value})} placeholder="example@upi" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" />
+              </div>
+           </div>
+
+           <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Update Settings</button>
+        </form>
       )}
     </div>
   );

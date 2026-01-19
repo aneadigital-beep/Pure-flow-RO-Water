@@ -310,9 +310,15 @@ const App: React.FC = () => {
   }, []);
 
   const handleDeleteProduct = useCallback(async (id: string) => {
+    // 1. Immediate Local Response
     await deleteDocument(COLLECTIONS.PRODUCTS, id);
-    await deleteProductFromSupabase(id);
-    setActiveToast({ title: "Product Removed", message: "Item deleted." });
+    
+    // 2. Background Cloud Sync
+    deleteProductFromSupabase(id).then(success => {
+        if (!success) console.warn("Supabase deletion delayed or failed.");
+    });
+
+    setActiveToast({ title: "Product Removed", message: "Item deleted successfully." });
   }, []);
 
   const handleAddStaff = useCallback(async (mobile: string, name: string) => {
@@ -342,7 +348,7 @@ const App: React.FC = () => {
   const unreadCount = relevantNotifications.filter(n => !n.isRead).length;
 
   return (
-    <div className="flex flex-col md:flex-row h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
+    <div className="flex flex-col md:flex-row h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden text-left">
       {activeToast && <Toast title={activeToast.title} message={activeToast.message} onClose={() => setActiveToast(null)} />}
       <Navbar currentView={currentView} onViewChange={setCurrentView} cartCount={cart.reduce((a, b) => a + b.quantity, 0)} />
       <div className="flex-1 flex flex-col relative h-full md:pl-20 pb-20 md:pb-0 transition-all duration-300">

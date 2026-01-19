@@ -91,7 +91,7 @@ export const syncCollection = (
 
 export const upsertDocument = async (collectionName: string, id: string, data: any) => {
   const existing = getLocalData(collectionName);
-  const index = existing.findIndex(doc => String(doc.id) === String(id));
+  const index = existing.findIndex(doc => String(doc.id).trim() === String(id).trim());
   const updatedDoc = { ...data, id, lastUpdated: new Date().toISOString() };
   if (index >= 0) existing[index] = { ...existing[index], ...updatedDoc };
   else existing.push(updatedDoc);
@@ -100,7 +100,7 @@ export const upsertDocument = async (collectionName: string, id: string, data: a
 
 export const updateDocument = async (collectionName: string, id: string, data: any) => {
   const existing = getLocalData(collectionName);
-  const index = existing.findIndex(doc => String(doc.id) === String(id));
+  const index = existing.findIndex(doc => String(doc.id).trim() === String(id).trim());
   if (index >= 0) {
     existing[index] = { ...existing[index], ...data, lastUpdated: new Date().toISOString() };
     setLocalData(collectionName, existing);
@@ -109,11 +109,13 @@ export const updateDocument = async (collectionName: string, id: string, data: a
 
 export const deleteDocument = async (collectionName: string, id: string) => {
   const existing = getLocalData(collectionName);
-  const filtered = existing.filter(doc => String(doc.id) !== String(id));
+  const targetId = String(id).trim();
+  const filtered = existing.filter(doc => String(doc.id).trim() !== targetId);
   setLocalData(collectionName, filtered);
 };
 
 export const getDocument = async (collectionName: string, id: string) => {
   const existing = getLocalData(collectionName);
-  return existing.find(doc => String(doc.id) === String(id)) || null;
+  const targetId = String(id).trim();
+  return existing.find(doc => String(doc.id).trim() === targetId) || null;
 };
