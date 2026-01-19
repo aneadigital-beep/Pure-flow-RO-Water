@@ -19,6 +19,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange, cartCount })
   return (
     <nav className="fixed bottom-0 left-0 right-0 md:top-0 md:bottom-0 md:left-0 md:right-auto md:w-20 h-20 md:h-full bg-white dark:bg-slate-900 border-t md:border-t-0 md:border-r border-slate-200 dark:border-slate-800 shadow-2xl flex md:flex-col items-center justify-around md:justify-start md:py-10 gap-2 md:gap-4 z-50 transition-all duration-300 safe-bottom">
       
+      {/* Navigation Links */}
       <div className="flex md:flex-col gap-1 md:gap-3 w-full md:px-2">
         {tabs.map((tab) => (
           <button
@@ -42,12 +43,12 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange, cartCount })
               {tab.label}
             </span>
             
-            {/* Active Indicators */}
+            {/* Minimalist Active Indicators (No background color on sidebar) */}
             {currentView === tab.id && (
               <>
-                {/* Desktop Side Bar indicator */}
+                {/* Desktop Side Bar indicator rail */}
                 <div className="hidden md:block absolute left-0 w-1 h-8 bg-blue-600 rounded-r-full shadow-[0_0_10px_rgba(37,99,235,0.4)]"></div>
-                {/* Mobile Bottom Bar indicator */}
+                {/* Mobile Bottom Bar indicator rail */}
                 <div className="md:hidden absolute top-0 w-8 h-1 bg-blue-600 rounded-b-full shadow-[0_0_10px_rgba(37,99,235,0.4)]"></div>
               </>
             )}
