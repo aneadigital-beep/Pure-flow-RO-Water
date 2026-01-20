@@ -7,11 +7,13 @@ interface OrdersProps {
   orders: Order[];
   upiId: string;
   onCancelOrder: (id: string) => void;
+  onHelpClick?: (orderId: string) => void;
 }
 
-const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder }) => {
+const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder, onHelpClick }) => {
   const [showQrFor, setShowQrFor] = useState<string | null>(null);
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
 
   if (orders.length === 0) {
     return (
@@ -35,11 +37,6 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder }) => {
     }
   };
 
-  const handleCancel = (id: string) => {
-    onCancelOrder(id);
-    setCancelConfirmId(null);
-  };
-
   return (
     <div className="space-y-6 text-left">
       <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100 px-1">Order History</h2>
@@ -58,9 +55,11 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder }) => {
                   <span className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest block mb-1">Order #{order.id}</span>
                   <h3 className="font-black text-gray-900 dark:text-slate-100 text-lg leading-tight">{order.date}</h3>
                   {order.deliverySlot && (
-                    <div className="flex items-center gap-1.5 mt-1">
+                    <div className="flex items-center gap-1.5 mt-2 bg-slate-50 dark:bg-slate-900/50 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-800 w-fit">
                       <i className="fas fa-clock text-blue-500 text-[10px]"></i>
-                      <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{order.deliverySlot}</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest">
+                        Slot: <span className="text-blue-600 dark:text-blue-400">{order.deliverySlot}</span>
+                      </span>
                     </div>
                   )}
                 </div>
@@ -99,7 +98,7 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder }) => {
                   </div>
                 </div>
                 
-                <div className="flex flex-col gap-3 mt-5 pt-4 border-t border-dashed border-gray-100 dark:border-slate-700">
+                <div className="flex flex-col gap-2 mt-5 pt-4 border-t border-dashed border-gray-100 dark:border-slate-700">
                   {order.paymentMethod === 'UPI/Online' && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
                     <>
                       {showQrFor === order.id ? (
@@ -119,43 +118,58 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder }) => {
                     </>
                   )}
 
-                  {canCancel && (
-                    <div className="w-full">
-                      {cancelConfirmId === order.id ? (
-                        <div className="flex items-center gap-2 animate-in slide-in-from-right-2">
-                          <button 
-                            onClick={() => handleCancel(order.id)}
-                            className="flex-1 bg-red-600 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all"
-                          >
-                            Confirm Cancel
-                          </button>
-                          <button 
-                            onClick={() => setCancelConfirmId(null)}
-                            className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
-                          >
-                            No, keep it
-                          </button>
-                        </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => onHelpClick?.(order.id)}
+                      className="py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/10 active:scale-95 transition-all"
+                    >
+                      <i className="fas fa-life-ring"></i> Get Help
+                    </button>
+                    {canCancel && (
+                      cancelConfirmId === order.id ? (
+                        <button 
+                          onClick={() => { onCancelOrder(order.id); setCancelConfirmId(null); }}
+                          className="bg-red-600 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest animate-in slide-in-from-right-2"
+                        >
+                          Confirm
+                        </button>
                       ) : (
                         <button 
                           onClick={() => setCancelConfirmId(order.id)}
-                          className="w-full py-3 bg-white dark:bg-slate-800 text-red-500 dark:text-red-400 border border-red-100 dark:border-red-900/30 rounded-xl text-[10px] font-black uppercase tracking-widest active:bg-red-50 dark:active:bg-red-900/10 transition-all"
+                          className="py-3 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
                         >
-                          Cancel Order
+                          Cancel
                         </button>
-                      )}
+                      )
+                    )}
+                  </div>
+                </div>
+                
+                <div className="mt-4">
+                  <button 
+                    onClick={() => setExpandedHistory(expandedHistory === order.id ? null : order.id)}
+                    className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 group"
+                  >
+                    <p className="text-[9px] text-gray-400 dark:text-slate-500 font-bold uppercase flex items-center gap-2">
+                      <i className="fas fa-clock-rotate-left"></i>
+                      View Delivery Timeline
+                    </p>
+                    <i className={`fas fa-chevron-down text-[8px] text-slate-300 transition-transform ${expandedHistory === order.id ? 'rotate-180' : ''}`}></i>
+                  </button>
+                  
+                  {expandedHistory === order.id && (
+                    <div className="mt-3 space-y-3 pl-4 border-l-2 border-slate-100 dark:border-slate-800 ml-2 animate-in slide-in-from-top-2">
+                      {order.history.map((step, idx) => (
+                        <div key={idx} className="relative">
+                          <div className="absolute -left-[1.35rem] top-1 h-2 w-2 rounded-full bg-blue-500 border-2 border-white dark:border-slate-800"></div>
+                          <p className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase">{step.status}</p>
+                          <p className="text-[9px] text-slate-400 font-medium">{step.timestamp}</p>
+                          {step.note && <p className="text-[9px] text-slate-500 italic mt-0.5">{step.note}</p>}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-                
-                {order.history.length > 1 && (
-                  <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <p className="text-[9px] text-gray-400 dark:text-slate-500 font-bold uppercase flex items-center gap-2">
-                      <i className="fas fa-clock-rotate-left"></i>
-                      Latest Update: {order.history[order.history.length - 1].note}
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           );

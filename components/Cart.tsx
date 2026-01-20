@@ -25,10 +25,10 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
     `upi://pay?pa=${upiId}&pn=${TOWN_NAME}&am=${total}&cu=INR&tn=PureFlow_Order`
   )}`;
 
-  const slots: { id: DeliverySlot; icon: string; label: string }[] = [
-    { id: 'Morning (8AM-11AM)', icon: 'fa-sun', label: 'Morning' },
-    { id: 'Afternoon (12PM-3PM)', icon: 'fa-cloud-sun', label: 'Afternoon' },
-    { id: 'Evening (4PM-7PM)', icon: 'fa-moon', label: 'Evening' },
+  const slots: { id: DeliverySlot; icon: string; label: string; time: string }[] = [
+    { id: 'Morning (8AM-11AM)', icon: 'fa-sun', label: 'Morning', time: '8AM-11AM' },
+    { id: 'Afternoon (12PM-3PM)', icon: 'fa-cloud-sun', label: 'Afternoon', time: '12PM-3PM' },
+    { id: 'Evening (4PM-7PM)', icon: 'fa-moon', label: 'Evening', time: '4PM-7PM' },
   ];
 
   const handleUpdate = (id: string, delta: number) => {
@@ -127,7 +127,7 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
               <button
                 key={slot.id}
                 onClick={() => setSelectedSlot(slot.id)}
-                className={`flex flex-col items-center justify-center min-w-[100px] p-4 rounded-2xl border-2 transition-all duration-300 ${
+                className={`flex flex-col items-center justify-center min-w-[105px] p-4 rounded-2xl border-2 transition-all duration-300 ${
                   selectedSlot === slot.id 
                     ? 'border-blue-600 bg-blue-600 text-white shadow-lg scale-[1.02]' 
                     : 'border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-600'
@@ -135,6 +135,9 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
               >
                 <i className={`fas ${slot.icon} mb-2 text-lg`}></i>
                 <span className="text-[9px] font-black uppercase tracking-wider">{slot.label}</span>
+                <span className={`text-[8px] mt-0.5 font-bold ${selectedSlot === slot.id ? 'text-blue-100 opacity-90' : 'text-slate-400'}`}>
+                  {slot.time}
+                </span>
               </button>
             ))}
           </div>

@@ -22,7 +22,6 @@ export const getWaterAdvice = async (prompt: string): Promise<AIResponse> => {
   try {
     const ai = new GoogleGenAI({ apiKey });
     
-    // Using gemini-3-flash-preview for efficiency + Google Search capabilities
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -31,16 +30,21 @@ export const getWaterAdvice = async (prompt: string): Promise<AIResponse> => {
         systemInstruction: `
           You are the "PureFlow AI Assistant", an expert in water quality and community logistics.
           
-          Context for PureFlow:
-          - A 20L Water Can costs ₹35.
-          - Delivery Fee is ₹10.
-          - Weekly Subscriptions cost ₹250/month.
-          - Daily Family Plans cost ₹900/month.
+          Context for PureFlow Delivery:
+          - Deliveries are grouped into 3 slots: Morning (8-11AM), Afternoon (12-3PM), Evening (4-7PM).
+          - Orders placed before 10 AM are same-day. After 10 AM are next-day.
+          - 20L Water Can costs ₹35. Delivery Fee is ₹10.
+          
+          If a user asks why they haven't received their items:
+          1. Be empathetic.
+          2. Ask if their selected delivery window (Morning, Afternoon, or Evening) has passed yet.
+          3. Remind them that high demand can sometimes cause slight delays.
+          4. Suggest they check the "Orders" tab to see if the status has changed to "Out for Delivery".
+          5. If they are still worried, tell them to use the "Support" tab to contact the dispatch team directly.
           
           Guidelines:
-          - Use Google Search to answer health-related questions about RO water, TDS levels, and hydration.
-          - Keep answers helpful, empathetic, and professional.
-          - If asked about orders, remind the user to check the "Orders" tab.
+          - Use Google Search for health or RO water science questions.
+          - Keep answers helpful and professional.
           - Responses MUST be concise (max 3 sentences).
         `,
       },
@@ -48,7 +52,6 @@ export const getWaterAdvice = async (prompt: string): Promise<AIResponse> => {
 
     const text = response.text || "I processed your request but couldn't generate a clear response. How else can I help?";
     
-    // Extract grounding chunks (the "Cloud" sources)
     const sources: { title: string; uri: string }[] = [];
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     

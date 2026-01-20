@@ -12,6 +12,10 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
 
   const faqs = [
     {
+      q: "Order not received, what happened?",
+      a: "Most deliveries occur within your selected window (Morning/Afternoon/Evening). If your window has passed and your status is still 'Processing', it might be due to high demand. Please use the WhatsApp button below for a direct update."
+    },
+    {
       q: "When will my water be delivered?",
       a: "Orders placed before 10 AM are delivered on the same day. Orders after 10 AM are delivered within 24 hours."
     },
@@ -22,10 +26,6 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
     {
       q: "Is the water quality tested?",
       a: "Yes! PureFlow water undergoes a 7-stage RO purification process and is tested daily for TDS and pH levels."
-    },
-    {
-      q: "Can I cancel an order?",
-      a: "You can cancel any order that hasn't been marked as 'Out for Delivery' directly from your orders tab."
     }
   ];
 
@@ -33,8 +33,9 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
     window.location.href = `tel:${BUSINESS_PHONE}`;
   };
 
-  const handleWhatsApp = () => {
-    const message = encodeURIComponent(`Hi ${TOWN_NAME} Support, I need help with my water delivery.`);
+  const handleWhatsApp = (context?: string) => {
+    const text = context ? `I have an issue with order ${context}` : `Hi ${TOWN_NAME} Support, I need help with my water delivery.`;
+    const message = encodeURIComponent(text);
     window.open(`https://wa.me/${BUSINESS_PHONE}?text=${message}`, '_blank');
   };
 
@@ -55,7 +56,7 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
           
           <div className="grid grid-cols-2 gap-3">
             <button 
-              onClick={handleWhatsApp}
+              onClick={() => handleWhatsApp()}
               className="bg-white text-blue-600 py-4 rounded-2xl flex flex-col items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all"
             >
               <i className="fab fa-whatsapp text-2xl text-green-500"></i>
@@ -70,6 +71,23 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Order Issue?</h3>
+        <button 
+          onClick={() => handleWhatsApp("Not Received")}
+          className="w-full p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-2xl flex items-center gap-4 group"
+        >
+          <div className="h-10 w-10 rounded-xl bg-red-100 dark:bg-red-900/50 flex items-center justify-center text-red-600 dark:text-red-400">
+            <i className="fas fa-circle-exclamation"></i>
+          </div>
+          <div className="text-left flex-1">
+             <p className="text-sm font-bold text-red-800 dark:text-red-200">Report Missing Item</p>
+             <p className="text-[10px] text-red-600 dark:text-red-400/60 font-medium">Alert dispatch team about your order</p>
+          </div>
+          <i className="fas fa-chevron-right text-red-300 group-hover:translate-x-1 transition-transform"></i>
+        </button>
       </div>
 
       <div className="space-y-4">
