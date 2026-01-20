@@ -12,7 +12,9 @@ import {
   subscribeToTable,
   syncProductToSupabase,
   fetchProductsFromSupabase,
-  deleteProductFromSupabase
+  deleteProductFromSupabase,
+  syncSettingToSupabase,
+  fetchSettingsFromSupabase
 } from './supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
@@ -46,7 +48,7 @@ const App: React.FC = () => {
   });
 
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
@@ -112,6 +114,22 @@ const App: React.FC = () => {
         if (cloudProducts && cloudProducts.length > 0) {
           cloudProducts.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
           localStorage.setItem('pf_products_initialized', 'true');
+        } else if (cloudProducts && cloudProducts.length === 0) {
+          // If cloud has zero products and we haven't initialized, we might need defaults,
+          // but if we ARE initialized, it means we intentionally have 0 products.
+          const initialized = localStorage.getItem('pf_products_initialized');
+          if (!initialized) {
+             INITIAL_PRODUCTS.forEach(p => {
+               upsertDocument(COLLECTIONS.PRODUCTS, p.id, p);
+               syncProductToSupabase(p);
+             });
+             localStorage.setItem('pf_products_initialized', 'true');
+          }
+        }
+
+        const cloudSettings = await fetchSettingsFromSupabase();
+        if (cloudSettings) {
+          cloudSettings.forEach(s => upsertDocument(COLLECTIONS.SETTINGS, s.id, s));
         }
       } catch (e) {
         setIsCloudSynced(false);
@@ -133,6 +151,7 @@ const App: React.FC = () => {
         setProducts(data as Product[]);
         localStorage.setItem('pf_products_initialized', 'true');
       } else if (!initialized) {
+        // Only seed if absolutely never initialized before
         INITIAL_PRODUCTS.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
         localStorage.setItem('pf_products_initialized', 'true');
       } else {
@@ -290,35 +309,33 @@ const App: React.FC = () => {
   }, [registeredUsers, allOrders, addNotification]);
 
   const handleAddProduct = useCallback(async (product: Product) => {
-    try {
-      await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
-      await syncProductToSupabase(product);
-      setActiveToast({ title: "Product Added", message: `${product.name} synced.` });
-    } catch (e) {
-      setActiveToast({ title: "Sync Limit", message: "Storage full. Image compressed but not saved locally." });
-    }
+    await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
+    await syncProductToSupabase(product);
+    localStorage.setItem('pf_products_initialized', 'true');
+    setActiveToast({ title: "Product Added", message: `${product.name} synced to cloud.` });
   }, []);
 
   const handleUpdateProduct = useCallback(async (product: Product) => {
-    try {
-      await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
-      await syncProductToSupabase(product);
-      setActiveToast({ title: "Product Updated", message: `${product.name} synced.` });
-    } catch (e) {
-      setActiveToast({ title: "Sync Limit", message: "Storage full. Relying on Cloud Sync." });
-    }
+    await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
+    await syncProductToSupabase(product);
+    setActiveToast({ title: "Product Updated", message: `${product.name} updated.` });
   }, []);
 
   const handleDeleteProduct = useCallback(async (id: string) => {
-    // 1. Immediate Local Response
     await deleteDocument(COLLECTIONS.PRODUCTS, id);
-    
-    // 2. Background Cloud Sync
-    deleteProductFromSupabase(id).then(success => {
-        if (!success) console.warn("Supabase deletion delayed or failed.");
-    });
+    await deleteProductFromSupabase(id);
+    localStorage.setItem('pf_products_initialized', 'true'); // Flag stays set so defaults don't come back
+    setActiveToast({ title: "Product Removed", message: "Item deleted from catalog." });
+  }, []);
 
-    setActiveToast({ title: "Product Removed", message: "Item deleted successfully." });
+  const updateDeliveryFee = useCallback(async (f: number) => {
+    await upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f });
+    await syncSettingToSupabase('deliveryFee', f);
+  }, []);
+
+  const updateUpiId = useCallback(async (id: string) => {
+    await upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id });
+    await syncSettingToSupabase('upiId', id);
   }, []);
 
   const handleAddStaff = useCallback(async (mobile: string, name: string) => {
@@ -384,7 +401,7 @@ const App: React.FC = () => {
             {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} />}
             {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('home')} />}
             {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile || '') === normalizeId(user.mobile || user.email || ''))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
-            {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} onUpdateDeliveryFee={(f) => upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f })} onUpdateUpiId={(id) => upsertDocument(COLLECTIONS.SETTINGS, 'upiId', { value: id })} onAssignOrder={assignOrder} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} onAddStaff={handleAddStaff} onUpdateStaffRole={handleUpdateStaffRole} onUpdateAdminRole={handleUpdateAdminRole} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
+            {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} onUpdateDeliveryFee={updateDeliveryFee} onUpdateUpiId={updateUpiId} onAssignOrder={assignOrder} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} onAddStaff={handleAddStaff} onUpdateStaffRole={handleUpdateStaffRole} onUpdateAdminRole={handleUpdateAdminRole} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
             {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
           </div>
         </main>

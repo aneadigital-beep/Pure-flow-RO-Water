@@ -34,8 +34,8 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId }) => {
   };
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100">Your Orders</h2>
+    <div className="space-y-6 text-left">
+      <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100 px-1">Order History</h2>
       <div className="space-y-4">
         {orders.map(order => {
           const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
@@ -43,50 +43,60 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId }) => {
           )}`;
 
           return (
-            <div key={order.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="flex justify-between items-start mb-3">
+            <div key={order.id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 animate-in fade-in slide-in-from-bottom-2 duration-300 transition-all hover:shadow-md">
+              <div className="flex justify-between items-start mb-4">
                 <div className="text-left">
-                  <span className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase tracking-wider">{order.id}</span>
-                  <h3 className="font-bold text-gray-800 dark:text-slate-200">{order.date}</h3>
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest block mb-1">Order #{order.id}</span>
+                  <h3 className="font-black text-gray-900 dark:text-slate-100 text-lg leading-tight">{order.date}</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Customer: {order.userName}</p>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusStyle(order.status)}`}>
+                <div className="flex flex-col items-end gap-1.5">
+                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${getStatusStyle(order.status)}`}>
                     {order.status}
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500">
-                    <i className="fas fa-wallet mr-1"></i> {order.paymentMethod}
                   </span>
                 </div>
               </div>
               
-              <div className="space-y-1 mb-3 text-left">
+              <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-2 mb-4">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-200 dark:border-slate-800 pb-1">Items Ordered</p>
                 {order.items.map(item => (
-                  <div key={item.product.id} className="text-sm text-gray-600 dark:text-slate-400 flex justify-between">
-                    <span>{item.quantity}x {item.product.name}</span>
-                    <span className="dark:text-slate-200">₹{item.product.price * item.quantity}</span>
+                  <div key={item.product.id} className="text-sm flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 bg-blue-500 rounded-full"></div>
+                      <span className="font-bold text-gray-800 dark:text-slate-200">{item.product.name}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">x {item.quantity}</span>
+                    </div>
+                    <span className="font-black text-slate-900 dark:text-white">₹{item.product.price * item.quantity}</span>
                   </div>
                 ))}
               </div>
               
-              <div className="pt-2 border-t border-gray-50 dark:border-slate-700">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-400 dark:text-slate-500">Grand Total</span>
-                  <span className="font-black text-gray-800 dark:text-slate-100 text-lg">₹{order.total}</span>
+              <div className="pt-2">
+                <div className="flex justify-between items-end">
+                  <div className="text-left">
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 font-black uppercase tracking-widest mb-0.5">Payment</p>
+                    <span className="text-xs font-bold text-gray-600 dark:text-slate-300">
+                      <i className="fas fa-wallet mr-1 text-slate-400"></i> {order.paymentMethod}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 font-black uppercase tracking-widest mb-0.5">Total Amount</p>
+                    <span className="font-black text-blue-600 dark:text-blue-400 text-2xl">₹{order.total}</span>
+                  </div>
                 </div>
                 
                 {order.paymentMethod === 'UPI/Online' && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
-                  <div className="mt-4 pt-4 border-t border-dashed border-gray-100 dark:border-slate-700">
+                  <div className="mt-5 pt-4 border-t border-dashed border-gray-100 dark:border-slate-700">
                     {showQrFor === order.id ? (
-                      <div className="bg-gray-50 dark:bg-slate-900 rounded-2xl p-4 text-center space-y-3 animate-in zoom-in-95">
-                        <img src={upiQrUrl} alt="UPI QR" className="h-40 w-40 mx-auto rounded-lg shadow-md" />
-                        <p className="text-[10px] text-gray-500 dark:text-slate-400 font-bold uppercase tracking-widest">Scan & Pay ₹{order.total}</p>
-                        <p className="text-[8px] text-gray-400 italic">UPI: {upiId}</p>
-                        <button onClick={() => setShowQrFor(null)} className="text-[10px] font-bold text-blue-600 uppercase">Hide QR</button>
+                      <div className="bg-gray-50 dark:bg-slate-900 rounded-3xl p-5 text-center space-y-3 animate-in zoom-in-95">
+                        <img src={upiQrUrl} alt="UPI QR" className="h-44 w-44 mx-auto rounded-2xl shadow-lg border-4 border-white dark:border-slate-800" />
+                        <p className="text-[10px] text-blue-800 dark:text-blue-300 font-black uppercase tracking-widest">Scan & Pay ₹{order.total}</p>
+                        <button onClick={() => setShowQrFor(null)} className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-sm mt-2">Close QR</button>
                       </div>
                     ) : (
                       <button 
                         onClick={() => setShowQrFor(order.id)}
-                        className="w-full py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 border border-blue-100 dark:border-blue-900/30"
+                        className="w-full py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
                       >
                         <i className="fas fa-qrcode"></i> Show Payment QR
                       </button>
@@ -95,10 +105,12 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId }) => {
                 )}
                 
                 {order.history.length > 1 && (
-                  <p className="text-[9px] text-gray-400 dark:text-slate-500 mt-2 italic text-left">
-                    <i className="fas fa-circle-info mr-1"></i>
-                    Latest: {order.history[order.history.length - 1].note}
-                  </p>
+                  <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <p className="text-[9px] text-gray-400 dark:text-slate-500 font-bold uppercase flex items-center gap-2">
+                      <i className="fas fa-clock-rotate-left"></i>
+                      Latest Update: {order.history[order.history.length - 1].note}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>

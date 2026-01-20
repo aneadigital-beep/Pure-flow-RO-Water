@@ -59,6 +59,24 @@ export const deleteProductFromSupabase = async (id: string) => {
   }
 };
 
+export const syncSettingToSupabase = async (id: string, value: any) => {
+  try {
+    const { error } = await supabase.from('settings').upsert({ id, value }, { onConflict: 'id' });
+    return !error;
+  } catch (err) {
+    return false;
+  }
+};
+
+export const fetchSettingsFromSupabase = async () => {
+  try {
+    const { data, error } = await supabase.from('settings').select('*');
+    return error ? null : data;
+  } catch (err) {
+    return null;
+  }
+};
+
 export const fetchOrdersFromSupabase = async () => {
   try {
     const { data, error } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });

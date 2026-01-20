@@ -49,6 +49,8 @@ const Admin: React.FC<AdminProps> = ({
   const [adminNote, setAdminNote] = useState('');
 
   const [settingsForm, setSettingsForm] = useState({ fee: deliveryFee, upi: upiId });
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [saveSettingsStatus, setSaveSettingsStatus] = useState<'idle' | 'saved'>('idle');
   const [staffSearch, setStaffSearch] = useState('');
   
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -167,13 +169,10 @@ const Admin: React.FC<AdminProps> = ({
 
   const handleUpdateTask = () => {
     if (!selectedOrder) return;
-    
-    // Trigger assignment update if selection differs from existing
     const currentStaffId = tempStaff || undefined;
     if (currentStaffId !== selectedOrder.assignedToMobile) {
       onAssignOrder(selectedOrder.id, currentStaffId);
     }
-    
     onUpdateStatus(selectedOrder.id, tempStatus, adminNote || `Updated by Admin`);
     setSelectedOrderId(null);
   };
@@ -200,6 +199,21 @@ const Admin: React.FC<AdminProps> = ({
     setDeleteConfirmId(null);
   };
 
+  const handleUpdateSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSettings(true);
+    
+    // Call props to update local & cloud
+    onUpdateDeliveryFee(settingsForm.fee);
+    onUpdateUpiId(settingsForm.upi);
+    
+    setTimeout(() => {
+      setIsSavingSettings(false);
+      setSaveSettingsStatus('saved');
+      setTimeout(() => setSaveSettingsStatus('idle'), 3000);
+    }, 800);
+  };
+
   const handleAddStaffSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (staffForm.mobile.length === 10 && staffForm.name) {
@@ -213,7 +227,7 @@ const Admin: React.FC<AdminProps> = ({
     setIsDragging(true);
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    setDragStart({ x: clientX - cropState.x, y: clientY - cropState.y });
+    setDragStart({ x: clientX - cropState.x, y: clientY - dragStart.y });
   };
 
   const onDrag = (e: React.MouseEvent | React.TouchEvent) => {
@@ -230,7 +244,6 @@ const Admin: React.FC<AdminProps> = ({
           <h3 className="text-white font-black uppercase text-xs tracking-widest mb-1">Crop Image (1:1)</h3>
           <p className="text-white/40 text-[10px]">Drag to move • Slider to zoom</p>
         </div>
-
         <div 
           ref={cropperRef}
           className="relative w-72 h-72 bg-slate-900 overflow-hidden rounded-2xl border-4 border-white/10 cursor-move"
@@ -257,7 +270,6 @@ const Admin: React.FC<AdminProps> = ({
           <div className="absolute top-1/2 left-0 right-0 border-t border-white/20 pointer-events-none"></div>
           <div className="absolute top-0 bottom-0 left-1/2 border-l border-white/20 pointer-events-none"></div>
         </div>
-
         <div className="w-full max-w-[280px] mt-8 space-y-6">
           <div className="flex items-center gap-4">
             <i className="fas fa-minus text-white/30 text-[10px]"></i>
@@ -272,20 +284,9 @@ const Admin: React.FC<AdminProps> = ({
             />
             <i className="fas fa-plus text-white/30 text-[10px]"></i>
           </div>
-
           <div className="flex gap-3">
-            <button 
-              onClick={() => { setShowCropper(false); setRawImage(null); }}
-              className="flex-1 bg-white/5 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest"
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={finalizeCrop}
-              className="flex-1 bg-blue-600 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-500/20"
-            >
-              Confirm Crop
-            </button>
+            <button onClick={() => { setShowCropper(false); setRawImage(null); }} className="flex-1 bg-white/5 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest">Cancel</button>
+            <button onClick={finalizeCrop} className="flex-1 bg-blue-600 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-500/20">Confirm Crop</button>
           </div>
         </div>
       </div>
@@ -301,14 +302,12 @@ const Admin: React.FC<AdminProps> = ({
           </button>
           <h2 className="text-xl font-bold">Order Detail</h2>
         </div>
-        
         <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 space-y-6">
            <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Customer</p>
               <h3 className="font-black text-slate-800 dark:text-white text-lg">{selectedOrder.userName}</h3>
               <p className="text-sm text-slate-500">{selectedOrder.userMobile}</p>
            </div>
-           
            <div className="space-y-4">
                 <div>
                   <label className="text-[10px] text-blue-600 font-black uppercase mb-1.5 block">Status</label>
@@ -320,33 +319,21 @@ const Admin: React.FC<AdminProps> = ({
                     <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
-
                 <div>
                   <label className="text-[10px] text-blue-600 font-black uppercase mb-1.5 block">Assign Partner</label>
-                  <select 
-                    value={tempStaff || ''} 
-                    onChange={(e) => setTempStaff(e.target.value || undefined)} 
-                    className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all outline-none"
-                  >
+                  <select value={tempStaff || ''} onChange={(e) => setTempStaff(e.target.value || undefined)} className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all outline-none">
                     <option value="">-- No Staff / Unassigned --</option>
                     {deliveryBoys.map(db => (
                       <option key={db.mobile || db.email} value={db.mobile || db.email}>{db.name}</option>
                     ))}
                   </select>
                 </div>
-                
                 <div>
                   <label className="text-[10px] text-slate-400 font-black uppercase mb-1.5 block">Admin Note</label>
-                  <textarea 
-                    value={adminNote}
-                    onChange={(e) => setAdminNote(e.target.value)}
-                    placeholder="Internal comments..."
-                    className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none h-20 resize-none transition-all shadow-sm"
-                  />
+                  <textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)} placeholder="Internal comments..." className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none h-20 resize-none transition-all shadow-sm" />
                 </div>
            </div>
         </div>
-
         <button onClick={handleUpdateTask} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Update Task</button>
       </div>
     );
@@ -367,11 +354,11 @@ const Admin: React.FC<AdminProps> = ({
 
       {activeTab === 'Dashboard' && (
         <div className="grid grid-cols-2 gap-4 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm text-left">
             <p className="text-2xl font-black text-slate-900 dark:text-white">₹{stats.revenue}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase">Revenue</p>
           </div>
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm text-left">
             <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.pending}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase">Pending</p>
           </div>
@@ -381,15 +368,16 @@ const Admin: React.FC<AdminProps> = ({
       {activeTab === 'Orders' && (
         <div className="space-y-4 animate-in fade-in">
           {orders.map(o => (
-            <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border flex flex-col cursor-pointer transition-colors shadow-sm border-slate-100 dark:border-slate-700 hover:border-blue-200">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-sm">{o.userName}</p>
-                  <p className="text-[10px] text-slate-400 font-bold">{o.date} • {o.id}</p>
+            <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border flex flex-col cursor-pointer transition-colors shadow-sm border-slate-100 dark:border-slate-700 hover:border-blue-200 text-left">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <p className="font-bold text-sm text-slate-900 dark:text-slate-100">{o.userName}</p>
+                  <p className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-wider mb-1">{o.productSummary || 'Refill Order'}</p>
+                  <p className="text-[9px] text-slate-400 font-bold">{o.date} • {o.id}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-black text-blue-600">₹{o.total}</p>
-                  <span className="text-[8px] font-black uppercase text-slate-400">{o.status}</span>
+                  <p className="text-sm font-black text-slate-900 dark:text-white">₹{o.total}</p>
+                  <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${o.status === 'Pending' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}>{o.status}</span>
                 </div>
               </div>
             </div>
@@ -405,24 +393,11 @@ const Admin: React.FC<AdminProps> = ({
                 <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest">{editingProduct ? 'Edit Product' : 'Add New Item'}</h3>
                 <button type="button" onClick={() => { setIsAddingNew(false); setEditingProduct(null); }} className="text-slate-400 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
               </div>
-
               <div className="flex gap-4">
                 <div className="h-24 w-24 bg-slate-50 dark:bg-slate-900 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center relative overflow-hidden shrink-0 group">
-                  {prodForm.image ? (
-                    <img src={prodForm.image} className={`h-full w-full object-cover transition-opacity ${isProcessingImg ? 'opacity-30' : 'opacity-100'}`} alt="" />
-                  ) : (
-                    <i className="fas fa-image text-slate-300 text-xl"></i>
-                  )}
-                  
-                  {isProcessingImg && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-[2px]">
-                      <i className="fas fa-circle-notch animate-spin text-blue-600"></i>
-                    </div>
-                  )}
-
-                  <button type="button" onClick={() => !isProcessingImg && fileInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <i className="fas fa-camera"></i>
-                  </button>
+                  {prodForm.image ? (<img src={prodForm.image} className={`h-full w-full object-cover transition-opacity ${isProcessingImg ? 'opacity-30' : 'opacity-100'}`} alt="" />) : (<i className="fas fa-image text-slate-300 text-xl"></i>)}
+                  {isProcessingImg && (<div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-[2px]"><i className="fas fa-circle-notch animate-spin text-blue-600"></i></div>)}
+                  <button type="button" onClick={() => !isProcessingImg && fileInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-camera"></i></button>
                 </div>
                 <div className="flex-1 space-y-3">
                   <input type="text" placeholder="Product Name" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
@@ -432,22 +407,14 @@ const Admin: React.FC<AdminProps> = ({
                   </div>
                 </div>
               </div>
-              
               <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-
-              <button 
-                type="submit" 
-                disabled={isProcessingImg}
-                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all disabled:opacity-50"
-              >
-                {isProcessingImg ? 'Optimizing (800x800)...' : 'Save Product'}
-              </button>
+              <button type="submit" disabled={isProcessingImg} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all disabled:opacity-50">{isProcessingImg ? 'Optimizing (800x800)...' : 'Save Product'}</button>
             </form>
           ) : (
             <>
               <div className="grid grid-cols-1 gap-4">
                 {products.map(p => (
-                  <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex gap-4 text-left relative overflow-hidden">
+                  <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex gap-4 text-left relative overflow-hidden transition-all shadow-sm">
                     <img src={p.image} className="h-16 w-16 rounded-xl object-cover shrink-0" alt="" />
                     <div className="flex-1">
                        <div className="flex justify-between items-start">
@@ -455,23 +422,11 @@ const Admin: React.FC<AdminProps> = ({
                            <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{p.name}</h4>
                            <p className="text-[10px] text-slate-400 font-bold uppercase">₹{p.price}/{p.unit}</p>
                          </div>
-                         
                          <div className="flex items-center gap-1">
                             {deleteConfirmId === p.id ? (
                                <div className="flex gap-1 animate-in slide-in-from-right-2">
-                                  <button 
-                                    onClick={() => handleConfirmDelete(p.id)}
-                                    disabled={isDeletingId === p.id}
-                                    className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm active:scale-90 transition-all"
-                                  >
-                                    {isDeletingId === p.id ? <i className="fas fa-circle-notch animate-spin"></i> : 'Confirm?'}
-                                  </button>
-                                  <button 
-                                    onClick={() => setDeleteConfirmId(null)}
-                                    className="bg-slate-100 dark:bg-slate-700 text-slate-500 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest"
-                                  >
-                                    No
-                                  </button>
+                                  <button onClick={() => handleConfirmDelete(p.id)} disabled={isDeletingId === p.id} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm active:scale-90 transition-all">{isDeletingId === p.id ? <i className="fas fa-circle-notch animate-spin"></i> : 'Confirm?'}</button>
+                                  <button onClick={() => setDeleteConfirmId(null)} className="bg-slate-100 dark:bg-slate-700 text-slate-500 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest">No</button>
                                </div>
                             ) : (
                                <>
@@ -511,10 +466,9 @@ const Admin: React.FC<AdminProps> = ({
                 <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                 <input type="text" placeholder="Search team..." value={staffSearch} onChange={e => setStaffSearch(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" />
               </div>
-
               <div className="space-y-3">
                 {filteredStaff.map(s => (
-                  <div key={s.mobile || s.email} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
+                  <div key={s.mobile || s.email} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4 transition-all">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 bg-slate-100 dark:bg-slate-900 rounded-full flex items-center justify-center font-black text-blue-600">{s.name.charAt(0)}</div>
@@ -524,29 +478,22 @@ const Admin: React.FC<AdminProps> = ({
                         </div>
                       </div>
                     </div>
-                    
                     <div className="flex gap-2">
-                       <button onClick={() => onUpdateStaffRole(s.mobile || s.email || '', !s.isDeliveryBoy)} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider border-2 transition-all ${s.isDeliveryBoy ? 'bg-green-100 border-green-200 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-400'}`}>
-                         <i className="fas fa-truck-fast mr-2"></i> {s.isDeliveryBoy ? 'Staff Active' : 'Make Staff'}
-                       </button>
-                       <button onClick={() => onUpdateAdminRole(s.mobile || s.email || '', !s.isAdmin)} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider border-2 transition-all ${s.isAdmin ? 'bg-yellow-100 border-yellow-200 text-yellow-700' : 'bg-slate-50 border-slate-300 text-slate-400'}`}>
-                         <i className="fas fa-crown mr-2"></i> {s.isAdmin ? 'Admin' : 'Make Admin'}
-                       </button>
+                       <button onClick={() => onUpdateStaffRole(s.mobile || s.email || '', !s.isDeliveryBoy)} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider border-2 transition-all ${s.isDeliveryBoy ? 'bg-green-100 border-green-200 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-400'}`}><i className="fas fa-truck-fast mr-2"></i> {s.isDeliveryBoy ? 'Staff Active' : 'Make Staff'}</button>
+                       <button onClick={() => onUpdateAdminRole(s.mobile || s.email || '', !s.isAdmin)} className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider border-2 transition-all ${s.isAdmin ? 'bg-yellow-100 border-yellow-200 text-yellow-700' : 'bg-slate-50 border-slate-300 text-slate-400'}`}><i className="fas fa-crown mr-2"></i> {s.isAdmin ? 'Admin' : 'Make Admin'}</button>
                     </div>
                   </div>
                 ))}
               </div>
-              <button onClick={() => setIsAddingStaff(true)} className="w-full bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-dashed border-blue-200 dark:border-blue-900/50 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors active:scale-95">
-                <i className="fas fa-user-plus"></i> Add New Team Member
-              </button>
+              <button onClick={() => setIsAddingStaff(true)} className="w-full bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-dashed border-blue-200 dark:border-blue-900/50 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors active:scale-95"><i className="fas fa-user-plus"></i> Add New Team Member</button>
             </div>
           )}
         </div>
       )}
 
       {activeTab === 'Settings' && (
-        <form onSubmit={(e) => { e.preventDefault(); onUpdateDeliveryFee(settingsForm.fee); onUpdateUpiId(settingsForm.upi); alert('Updated!'); }} className="space-y-6 animate-in fade-in text-left px-1">
-           <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-6">
+        <form onSubmit={handleUpdateSettings} className="space-y-6 animate-in fade-in text-left px-1">
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-6 shadow-sm">
               <div>
                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block">Global Delivery Fee</label>
                  <div className="relative">
@@ -554,14 +501,27 @@ const Admin: React.FC<AdminProps> = ({
                     <input type="number" value={settingsForm.fee} onChange={e => setSettingsForm({...settingsForm, fee: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl py-4 pl-10 pr-4 font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" />
                  </div>
               </div>
-
               <div>
                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block">Business UPI ID</label>
                  <input type="text" value={settingsForm.upi} onChange={e => setSettingsForm({...settingsForm, upi: e.target.value})} placeholder="example@upi" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" />
               </div>
            </div>
-
-           <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Update Settings</button>
+           
+           <button 
+             type="submit" 
+             disabled={isSavingSettings}
+             className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 ${
+               saveSettingsStatus === 'saved' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'
+             }`}
+           >
+             {isSavingSettings ? (
+                <i className="fas fa-circle-notch animate-spin"></i>
+             ) : saveSettingsStatus === 'saved' ? (
+                <><i className="fas fa-check"></i> Settings Saved!</>
+             ) : (
+                'Update Settings'
+             )}
+           </button>
         </form>
       )}
     </div>
