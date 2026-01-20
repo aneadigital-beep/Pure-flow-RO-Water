@@ -140,25 +140,30 @@ const Admin: React.FC<AdminProps> = ({
       const ctx = canvas.getContext('2d');
       
       if (ctx) {
+        // Enforce solid white background for consistency
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, 800, 800);
 
-        const baseSize = Math.min(img.width, img.height);
-        const cropWidth = baseSize / cropState.zoom;
-        const cropHeight = baseSize / cropState.zoom;
-
-        const centerX = img.width / 2;
-        const centerY = img.height / 2;
+        // Container is 288px (w-72)
+        const containerSize = 288;
         
-        const scaleFactor = img.width / 300; 
-        const offsetX = -(cropState.x * scaleFactor);
-        const offsetY = -(cropState.y * scaleFactor);
+        // Math matches the visual translate/scale:
+        // Source image is scaled to container height (100% height)
+        const displayedHeight = containerSize;
+        const displayedWidth = (img.width / img.height) * containerSize;
+        
+        // Scale of real pixels to displayed pixels
+        const scale = img.height / containerSize;
+        
+        // Final crop size in source image pixels
+        const sourceCropSize = img.height / cropState.zoom;
+        
+        // Center offsets in source pixels
+        const sx = (img.width / 2) - (sourceCropSize / 2) - (cropState.x * scale / cropState.zoom);
+        const sy = (img.height / 2) - (sourceCropSize / 2) - (cropState.y * scale / cropState.zoom);
 
-        const sx = centerX - (cropWidth / 2) + offsetX;
-        const sy = centerY - (cropHeight / 2) + offsetY;
-
-        ctx.drawImage(img, sx, sy, cropWidth, cropHeight, 0, 0, 800, 800);
-        const processedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        ctx.drawImage(img, sx, sy, sourceCropSize, sourceCropSize, 0, 0, 800, 800);
+        const processedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setProdForm(prev => ({ ...prev, image: processedDataUrl }));
       }
       setIsProcessingImg(false);
@@ -202,11 +207,8 @@ const Admin: React.FC<AdminProps> = ({
   const handleUpdateSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingSettings(true);
-    
-    // Call props to update local & cloud
     onUpdateDeliveryFee(settingsForm.fee);
     onUpdateUpiId(settingsForm.upi);
-    
     setTimeout(() => {
       setIsSavingSettings(false);
       setSaveSettingsStatus('saved');
@@ -227,7 +229,7 @@ const Admin: React.FC<AdminProps> = ({
     setIsDragging(true);
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    setDragStart({ x: clientX - cropState.x, y: clientY - dragStart.y });
+    setDragStart({ x: clientX - cropState.x, y: clientY - cropState.y });
   };
 
   const onDrag = (e: React.MouseEvent | React.TouchEvent) => {
@@ -239,14 +241,15 @@ const Admin: React.FC<AdminProps> = ({
 
   if (showCropper && rawImage) {
     return (
-      <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95">
-        <div className="text-center mb-6">
-          <h3 className="text-white font-black uppercase text-xs tracking-widest mb-1">Crop Image (1:1)</h3>
-          <p className="text-white/40 text-[10px]">Drag to move • Slider to zoom</p>
+      <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95 backdrop-blur-sm">
+        <div className="text-center mb-8">
+          <h3 className="text-white font-black uppercase text-sm tracking-[0.3em] mb-2">Perfect 1:1 Crop</h3>
+          <p className="text-white/40 text-[10px] uppercase font-bold tracking-widest">Drag to position • Pinch/Slider to zoom</p>
         </div>
+        
         <div 
           ref={cropperRef}
-          className="relative w-72 h-72 bg-slate-900 overflow-hidden rounded-2xl border-4 border-white/10 cursor-move"
+          className="relative w-72 h-72 bg-slate-900 overflow-hidden rounded-3xl border-4 border-white/20 cursor-move shadow-2xl"
           onMouseDown={startDrag}
           onMouseMove={onDrag}
           onMouseUp={() => setIsDragging(false)}
@@ -266,13 +269,26 @@ const Admin: React.FC<AdminProps> = ({
             }} 
             alt="To crop" 
           />
-          <div className="absolute inset-0 border-2 border-blue-500 rounded-lg pointer-events-none shadow-[0_0_0_1000px_rgba(0,0,0,0.5)]"></div>
-          <div className="absolute top-1/2 left-0 right-0 border-t border-white/20 pointer-events-none"></div>
-          <div className="absolute top-0 bottom-0 left-1/2 border-l border-white/20 pointer-events-none"></div>
+          
+          {/* Rule of thirds grid */}
+          <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3 opacity-30">
+            <div className="border-r border-b border-white/40"></div>
+            <div className="border-r border-b border-white/40"></div>
+            <div className="border-b border-white/40"></div>
+            <div className="border-r border-b border-white/40"></div>
+            <div className="border-r border-b border-white/40"></div>
+            <div className="border-b border-white/40"></div>
+            <div className="border-r border-white/40"></div>
+            <div className="border-r border-white/40"></div>
+            <div></div>
+          </div>
+          
+          <div className="absolute inset-0 border-[2px] border-blue-500 rounded-2xl pointer-events-none shadow-[0_0_0_1000px_rgba(0,0,0,0.6)]"></div>
         </div>
-        <div className="w-full max-w-[280px] mt-8 space-y-6">
-          <div className="flex items-center gap-4">
-            <i className="fas fa-minus text-white/30 text-[10px]"></i>
+
+        <div className="w-full max-w-[280px] mt-10 space-y-8">
+          <div className="flex items-center gap-5">
+            <i className="fas fa-minus text-white/30 text-xs"></i>
             <input 
               type="range" 
               min="1" 
@@ -282,59 +298,13 @@ const Admin: React.FC<AdminProps> = ({
               onChange={e => setCropState(prev => ({ ...prev, zoom: parseFloat(e.target.value) }))}
               className="flex-1 accent-blue-500 h-1.5 bg-white/10 rounded-full appearance-none outline-none"
             />
-            <i className="fas fa-plus text-white/30 text-[10px]"></i>
+            <i className="fas fa-plus text-white/30 text-xs"></i>
           </div>
-          <div className="flex gap-3">
-            <button onClick={() => { setShowCropper(false); setRawImage(null); }} className="flex-1 bg-white/5 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest">Cancel</button>
-            <button onClick={finalizeCrop} className="flex-1 bg-blue-600 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-500/20">Confirm Crop</button>
+          <div className="flex gap-4">
+            <button onClick={() => { setShowCropper(false); setRawImage(null); }} className="flex-1 bg-white/5 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">Cancel</button>
+            <button onClick={finalizeCrop} className="flex-1 bg-blue-600 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all">Apply Crop</button>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (selectedOrder) {
-    return (
-      <div className="space-y-6 pb-10 text-left px-1">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSelectedOrderId(null)} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-gray-600 dark:text-slate-300 transition-transform active:scale-90">
-            <i className="fas fa-arrow-left"></i>
-          </button>
-          <h2 className="text-xl font-bold">Order Detail</h2>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 space-y-6">
-           <div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Customer</p>
-              <h3 className="font-black text-slate-800 dark:text-white text-lg">{selectedOrder.userName}</h3>
-              <p className="text-sm text-slate-500">{selectedOrder.userMobile}</p>
-           </div>
-           <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] text-blue-600 font-black uppercase mb-1.5 block">Status</label>
-                  <select value={tempStatus} onChange={(e) => setTempStatus(e.target.value as Order['status'])} className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all outline-none">
-                    <option value="Pending">Pending</option>
-                    <option value="Processing">Processing</option>
-                    <option value="Out for Delivery">Out for Delivery</option>
-                    <option value="Delivered">Delivered</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-blue-600 font-black uppercase mb-1.5 block">Assign Partner</label>
-                  <select value={tempStaff || ''} onChange={(e) => setTempStaff(e.target.value || undefined)} className="w-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 dark:text-slate-200 focus:border-blue-500 transition-all outline-none">
-                    <option value="">-- No Staff / Unassigned --</option>
-                    {deliveryBoys.map(db => (
-                      <option key={db.mobile || db.email} value={db.mobile || db.email}>{db.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-slate-400 font-black uppercase mb-1.5 block">Admin Note</label>
-                  <textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)} placeholder="Internal comments..." className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none h-20 resize-none transition-all shadow-sm" />
-                </div>
-           </div>
-        </div>
-        <button onClick={handleUpdateTask} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Update Task</button>
       </div>
     );
   }
@@ -356,11 +326,11 @@ const Admin: React.FC<AdminProps> = ({
         <div className="grid grid-cols-2 gap-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm text-left">
             <p className="text-2xl font-black text-slate-900 dark:text-white">₹{stats.revenue}</p>
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Revenue</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Revenue</p>
           </div>
           <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm text-left">
             <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.pending}</p>
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Pending</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pending</p>
           </div>
         </div>
       )}
@@ -388,27 +358,60 @@ const Admin: React.FC<AdminProps> = ({
       {activeTab === 'Inventory' && (
         <div className="space-y-4 animate-in fade-in">
           {isAddingNew || editingProduct ? (
-            <form onSubmit={handleSaveProduct} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-4 text-left px-1">
+            <form onSubmit={handleSaveProduct} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-6 text-left px-1">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest">{editingProduct ? 'Edit Product' : 'Add New Item'}</h3>
                 <button type="button" onClick={() => { setIsAddingNew(false); setEditingProduct(null); }} className="text-slate-400 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
               </div>
-              <div className="flex gap-4">
-                <div className="h-24 w-24 bg-slate-50 dark:bg-slate-900 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center relative overflow-hidden shrink-0 group">
-                  {prodForm.image ? (<img src={prodForm.image} className={`h-full w-full object-cover transition-opacity ${isProcessingImg ? 'opacity-30' : 'opacity-100'}`} alt="" />) : (<i className="fas fa-image text-slate-300 text-xl"></i>)}
-                  {isProcessingImg && (<div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-[2px]"><i className="fas fa-circle-notch animate-spin text-blue-600"></i></div>)}
-                  <button type="button" onClick={() => !isProcessingImg && fileInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-camera"></i></button>
+              <div className="flex gap-5">
+                <div className="h-28 w-28 bg-slate-50 dark:bg-slate-950 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-800 flex items-center justify-center relative overflow-hidden shrink-0 group transition-all hover:border-blue-500">
+                  {prodForm.image ? (
+                    <img 
+                      src={prodForm.image} 
+                      className={`h-full w-full object-cover transition-all duration-500 ${isProcessingImg ? 'opacity-30 blur-sm scale-95' : 'opacity-100'}`} 
+                      alt="" 
+                    />
+                  ) : (
+                    <i className="fas fa-image text-slate-300 text-2xl"></i>
+                  )}
+                  {isProcessingImg && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <i className="fas fa-circle-notch animate-spin text-blue-600 text-xl"></i>
+                    </div>
+                  )}
+                  <button 
+                    type="button" 
+                    onClick={() => !isProcessingImg && fileInputRef.current?.click()} 
+                    className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <i className="fas fa-camera text-xl"></i>
+                  </button>
                 </div>
-                <div className="flex-1 space-y-3">
-                  <input type="text" placeholder="Product Name" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
-                  <div className="flex gap-2">
-                    <input type="number" placeholder="Price" value={prodForm.price} onChange={e => setProdForm({...prodForm, price: Number(e.target.value)})} className="flex-1 bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
-                    <input type="text" placeholder="Unit" value={prodForm.unit} onChange={e => setProdForm({...prodForm, unit: e.target.value})} className="w-20 bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm" required />
+                <div className="flex-1 space-y-4">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Product Label</label>
+                    <input type="text" placeholder="e.g. 20L Premium Can" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm outline-none" required />
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Price (₹)</label>
+                      <input type="number" placeholder="0" value={prodForm.price} onChange={e => setProdForm({...prodForm, price: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm outline-none" required />
+                    </div>
+                    <div className="w-24">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Unit</label>
+                      <input type="text" placeholder="Can" value={prodForm.unit} onChange={e => setProdForm({...prodForm, unit: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-blue-500 transition-all shadow-sm outline-none" required />
+                    </div>
                   </div>
                 </div>
               </div>
               <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-              <button type="submit" disabled={isProcessingImg} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all disabled:opacity-50">{isProcessingImg ? 'Optimizing (800x800)...' : 'Save Product'}</button>
+              <button 
+                type="submit" 
+                disabled={isProcessingImg || !prodForm.image} 
+                className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+              >
+                {isProcessingImg ? 'Processing 800x800 Image...' : 'Deploy to Catalog'}
+              </button>
             </form>
           ) : (
             <>
@@ -420,7 +423,7 @@ const Admin: React.FC<AdminProps> = ({
                        <div className="flex justify-between items-start">
                          <div>
                            <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{p.name}</h4>
-                           <p className="text-[10px] text-slate-400 font-bold uppercase">₹{p.price}/{p.unit}</p>
+                           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">₹{p.price}/{p.unit}</p>
                          </div>
                          <div className="flex items-center gap-1">
                             {deleteConfirmId === p.id ? (

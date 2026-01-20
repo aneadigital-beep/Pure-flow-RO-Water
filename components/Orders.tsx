@@ -6,10 +6,12 @@ import { TOWN_NAME } from '../constants';
 interface OrdersProps {
   orders: Order[];
   upiId: string;
+  onCancelOrder: (id: string) => void;
 }
 
-const Orders: React.FC<OrdersProps> = ({ orders, upiId }) => {
+const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder }) => {
   const [showQrFor, setShowQrFor] = useState<string | null>(null);
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
 
   if (orders.length === 0) {
     return (
@@ -33,6 +35,11 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId }) => {
     }
   };
 
+  const handleCancel = (id: string) => {
+    onCancelOrder(id);
+    setCancelConfirmId(null);
+  };
+
   return (
     <div className="space-y-6 text-left">
       <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100 px-1">Order History</h2>
@@ -42,13 +49,20 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId }) => {
             `upi://pay?pa=${upiId}&pn=${TOWN_NAME}&am=${order.total}&cu=INR&tn=Order_${order.id}`
           )}`;
 
+          const canCancel = order.status === 'Pending' || order.status === 'Processing';
+
           return (
             <div key={order.id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 animate-in fade-in slide-in-from-bottom-2 duration-300 transition-all hover:shadow-md">
               <div className="flex justify-between items-start mb-4">
                 <div className="text-left">
                   <span className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest block mb-1">Order #{order.id}</span>
                   <h3 className="font-black text-gray-900 dark:text-slate-100 text-lg leading-tight">{order.date}</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Customer: {order.userName}</p>
+                  {order.deliverySlot && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <i className="fas fa-clock text-blue-500 text-[10px]"></i>
+                      <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{order.deliverySlot}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                   <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${getStatusStyle(order.status)}`}>
@@ -85,24 +99,54 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId }) => {
                   </div>
                 </div>
                 
-                {order.paymentMethod === 'UPI/Online' && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
-                  <div className="mt-5 pt-4 border-t border-dashed border-gray-100 dark:border-slate-700">
-                    {showQrFor === order.id ? (
-                      <div className="bg-gray-50 dark:bg-slate-900 rounded-3xl p-5 text-center space-y-3 animate-in zoom-in-95">
-                        <img src={upiQrUrl} alt="UPI QR" className="h-44 w-44 mx-auto rounded-2xl shadow-lg border-4 border-white dark:border-slate-800" />
-                        <p className="text-[10px] text-blue-800 dark:text-blue-300 font-black uppercase tracking-widest">Scan & Pay ₹{order.total}</p>
-                        <button onClick={() => setShowQrFor(null)} className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-sm mt-2">Close QR</button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => setShowQrFor(order.id)}
-                        className="w-full py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
-                      >
-                        <i className="fas fa-qrcode"></i> Show Payment QR
-                      </button>
-                    )}
-                  </div>
-                )}
+                <div className="flex flex-col gap-3 mt-5 pt-4 border-t border-dashed border-gray-100 dark:border-slate-700">
+                  {order.paymentMethod === 'UPI/Online' && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                    <>
+                      {showQrFor === order.id ? (
+                        <div className="bg-gray-50 dark:bg-slate-900 rounded-3xl p-5 text-center space-y-3 animate-in zoom-in-95">
+                          <img src={upiQrUrl} alt="UPI QR" className="h-44 w-44 mx-auto rounded-2xl shadow-lg border-4 border-white dark:border-slate-800" />
+                          <p className="text-[10px] text-blue-800 dark:text-blue-300 font-black uppercase tracking-widest">Scan & Pay ₹{order.total}</p>
+                          <button onClick={() => setShowQrFor(null)} className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-sm mt-2">Close QR</button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setShowQrFor(order.id)}
+                          className="w-full py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+                        >
+                          <i className="fas fa-qrcode"></i> Show Payment QR
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {canCancel && (
+                    <div className="w-full">
+                      {cancelConfirmId === order.id ? (
+                        <div className="flex items-center gap-2 animate-in slide-in-from-right-2">
+                          <button 
+                            onClick={() => handleCancel(order.id)}
+                            className="flex-1 bg-red-600 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all"
+                          >
+                            Confirm Cancel
+                          </button>
+                          <button 
+                            onClick={() => setCancelConfirmId(null)}
+                            className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                          >
+                            No, keep it
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setCancelConfirmId(order.id)}
+                          className="w-full py-3 bg-white dark:bg-slate-800 text-red-500 dark:text-red-400 border border-red-100 dark:border-red-900/30 rounded-xl text-[10px] font-black uppercase tracking-widest active:bg-red-50 dark:active:bg-red-900/10 transition-all"
+                        >
+                          Cancel Order
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
                 
                 {order.history.length > 1 && (
                   <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">

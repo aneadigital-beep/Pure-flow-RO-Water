@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { CartItem } from '../types';
+import { CartItem, DeliverySlot } from '../types';
 import { TOWN_NAME } from '../constants';
 
 interface CartProps {
@@ -8,12 +8,13 @@ interface CartProps {
   upiId: string;
   onUpdate: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
-  onPlaceOrder: (method: 'COD' | 'UPI/Online') => void;
+  onPlaceOrder: (method: 'COD' | 'UPI/Online', slot: DeliverySlot) => void;
   deliveryFee: number;
 }
 
 const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOrder, deliveryFee }) => {
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'UPI/Online'>('COD');
+  const [selectedSlot, setSelectedSlot] = useState<DeliverySlot | null>(null);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0), [items]);
@@ -23,6 +24,12 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
   const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
     `upi://pay?pa=${upiId}&pn=${TOWN_NAME}&am=${total}&cu=INR&tn=PureFlow_Order`
   )}`;
+
+  const slots: { id: DeliverySlot; icon: string; label: string }[] = [
+    { id: 'Morning (8AM-11AM)', icon: 'fa-sun', label: 'Morning' },
+    { id: 'Afternoon (12PM-3PM)', icon: 'fa-cloud-sun', label: 'Afternoon' },
+    { id: 'Evening (4PM-7PM)', icon: 'fa-moon', label: 'Evening' },
+  ];
 
   const handleUpdate = (id: string, delta: number) => {
     setIsUpdating(id);
@@ -111,7 +118,30 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-900/5 pointer-events-none"></div>
 
         <div className="relative z-10 text-left">
-          <h3 className="text-[10px] font-bold text-gray-400 dark:text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-[0.2em]">
+          <h3 className="text-[10px] font-black text-gray-400 dark:text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-[0.2em]">
+            <i className="fas fa-clock text-blue-500"></i>
+            Preferred Delivery Time
+          </h3>
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {slots.map((slot) => (
+              <button
+                key={slot.id}
+                onClick={() => setSelectedSlot(slot.id)}
+                className={`flex flex-col items-center justify-center min-w-[100px] p-4 rounded-2xl border-2 transition-all duration-300 ${
+                  selectedSlot === slot.id 
+                    ? 'border-blue-600 bg-blue-600 text-white shadow-lg scale-[1.02]' 
+                    : 'border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-600'
+                }`}
+              >
+                <i className={`fas ${slot.icon} mb-2 text-lg`}></i>
+                <span className="text-[9px] font-black uppercase tracking-wider">{slot.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="relative z-10 text-left">
+          <h3 className="text-[10px] font-black text-gray-400 dark:text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-[0.2em]">
             <i className="fas fa-credit-card text-blue-500"></i>
             Payment Method
           </h3>
@@ -191,12 +221,13 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
         </div>
         
         <button
-          onClick={() => onPlaceOrder(paymentMethod)}
-          className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-200 dark:shadow-none transition-all active:scale-[0.97] flex items-center justify-center gap-3 relative z-10 overflow-hidden"
+          onClick={() => selectedSlot && onPlaceOrder(paymentMethod, selectedSlot)}
+          disabled={!selectedSlot}
+          className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-200 dark:shadow-none transition-all active:scale-[0.97] flex items-center justify-center gap-3 relative z-10 overflow-hidden disabled:opacity-50 disabled:grayscale"
         >
           <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity"></div>
           <i className={paymentMethod === 'COD' ? "fas fa-check-circle" : "fas fa-shield-check"}></i>
-          {paymentMethod === 'COD' ? 'Confirm Order' : 'Pay & Order'}
+          {!selectedSlot ? 'Select Delivery Slot' : paymentMethod === 'COD' ? 'Confirm Order' : 'Pay & Order'}
         </button>
       </div>
     </div>

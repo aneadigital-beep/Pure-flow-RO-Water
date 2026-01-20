@@ -101,6 +101,12 @@ const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({ orders, onUpdateS
                     </span>
                   </div>
                   <h4 className="font-bold text-gray-800 dark:text-slate-100 text-lg">{order.userName}</h4>
+                  {order.deliverySlot && (
+                    <div className="flex items-center gap-1.5 mt-1 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-lg w-fit">
+                      <i className="fas fa-clock text-blue-600 text-[9px]"></i>
+                      <span className="text-[9px] font-black uppercase text-blue-700 dark:text-blue-300">{order.deliverySlot}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-black text-green-600 dark:text-green-400">₹{order.total}</p>

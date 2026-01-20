@@ -33,6 +33,8 @@ export interface StatusHistory {
   note?: string;
 }
 
+export type DeliverySlot = 'Morning (8AM-11AM)' | 'Afternoon (12PM-3PM)' | 'Evening (4PM-7PM)';
+
 export interface Order {
   id: string;
   userMobile: string;
@@ -46,6 +48,7 @@ export interface Order {
   items: CartItem[];
   status: 'Pending' | 'Processing' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
   paymentMethod: 'COD' | 'UPI/Online';
+  deliverySlot?: DeliverySlot;
   history: StatusHistory[];
   assignedToMobile?: string;
   assignedToName?: string;
@@ -62,4 +65,4 @@ export interface AppNotification {
   userMobile?: string;
 }
 
-export type View = 'home' | 'cart' | 'profile' | 'orders' | 'admin' | 'delivery' | 'notifications' | 'assistant';
+export type View = 'home' | 'cart' | 'profile' | 'orders' | 'admin' | 'delivery' | 'notifications' | 'assistant' | 'support';
