@@ -122,10 +122,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers }) => {
         return;
       }
       
+      // Removed 'isLoggedIn: true' because it is not part of the expected credentials type in LoginProps.onLogin
       onLogin({
         mobile: entryValue,
-        name, address, pincode,
-        pin, isLoggedIn: true
+        name, 
+        address, 
+        pincode,
+        pin
       });
     }
   };

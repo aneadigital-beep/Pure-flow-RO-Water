@@ -140,28 +140,13 @@ const Admin: React.FC<AdminProps> = ({
       const ctx = canvas.getContext('2d');
       
       if (ctx) {
-        // Enforce solid white background for consistency
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, 800, 800);
-
-        // Container is 288px (w-72)
         const containerSize = 288;
-        
-        // Math matches the visual translate/scale:
-        // Source image is scaled to container height (100% height)
-        const displayedHeight = containerSize;
-        const displayedWidth = (img.width / img.height) * containerSize;
-        
-        // Scale of real pixels to displayed pixels
         const scale = img.height / containerSize;
-        
-        // Final crop size in source image pixels
         const sourceCropSize = img.height / cropState.zoom;
-        
-        // Center offsets in source pixels
         const sx = (img.width / 2) - (sourceCropSize / 2) - (cropState.x * scale / cropState.zoom);
         const sy = (img.height / 2) - (sourceCropSize / 2) - (cropState.y * scale / cropState.zoom);
-
         ctx.drawImage(img, sx, sy, sourceCropSize, sourceCropSize, 0, 0, 800, 800);
         const processedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setProdForm(prev => ({ ...prev, image: processedDataUrl }));
@@ -175,10 +160,11 @@ const Admin: React.FC<AdminProps> = ({
   const handleUpdateTask = () => {
     if (!selectedOrder) return;
     const currentStaffId = tempStaff || undefined;
-    if (currentStaffId !== selectedOrder.assignedToMobile) {
-      onAssignOrder(selectedOrder.id, currentStaffId);
-    }
+    
+    // Always call assign first if it changed or to ensure consistency
+    onAssignOrder(selectedOrder.id, currentStaffId);
     onUpdateStatus(selectedOrder.id, tempStatus, adminNote || `Updated by Admin`);
+    
     setSelectedOrderId(null);
   };
 
@@ -269,8 +255,6 @@ const Admin: React.FC<AdminProps> = ({
             }} 
             alt="To crop" 
           />
-          
-          {/* Rule of thirds grid */}
           <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3 opacity-30">
             <div className="border-r border-b border-white/40"></div>
             <div className="border-r border-b border-white/40"></div>
@@ -282,7 +266,6 @@ const Admin: React.FC<AdminProps> = ({
             <div className="border-r border-white/40"></div>
             <div></div>
           </div>
-          
           <div className="absolute inset-0 border-[2px] border-blue-500 rounded-2xl pointer-events-none shadow-[0_0_0_1000px_rgba(0,0,0,0.6)]"></div>
         </div>
 
@@ -291,9 +274,7 @@ const Admin: React.FC<AdminProps> = ({
             <i className="fas fa-minus text-white/30 text-xs"></i>
             <input 
               type="range" 
-              min="1" 
-              max="4" 
-              step="0.01" 
+              min="1" max="4" step="0.01" 
               value={cropState.zoom} 
               onChange={e => setCropState(prev => ({ ...prev, zoom: parseFloat(e.target.value) }))}
               className="flex-1 accent-blue-500 h-1.5 bg-white/10 rounded-full appearance-none outline-none"
@@ -302,7 +283,7 @@ const Admin: React.FC<AdminProps> = ({
           </div>
           <div className="flex gap-4">
             <button onClick={() => { setShowCropper(false); setRawImage(null); }} className="flex-1 bg-white/5 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">Cancel</button>
-            <button onClick={finalizeCrop} className="flex-1 bg-blue-600 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all">Apply Crop</button>
+            <button onClick={finalizeCrop} className="flex-1 bg-blue-600 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">Apply Crop</button>
           </div>
         </div>
       </div>
@@ -311,6 +292,75 @@ const Admin: React.FC<AdminProps> = ({
 
   return (
     <div className="space-y-6 pb-20 relative text-left px-1">
+      {/* Order Management Overlay */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom-10 flex flex-col gap-6 relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-600"></div>
+             
+             <div className="flex justify-between items-start">
+                <div className="text-left">
+                   <h3 className="text-xl font-black text-slate-900 dark:text-white">Manage Task</h3>
+                   <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest mt-1">Order #{selectedOrder.id}</p>
+                </div>
+                <button onClick={() => setSelectedOrderId(null)} className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400"><i className="fas fa-times"></i></button>
+             </div>
+
+             <div className="space-y-5">
+                <div>
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block">Update Status</label>
+                   <div className="grid grid-cols-2 gap-2">
+                      {(['Pending', 'Processing', 'Out for Delivery', 'Delivered', 'Cancelled'] as Order['status'][]).map(status => (
+                        <button 
+                          key={status}
+                          onClick={() => setTempStatus(status)}
+                          className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-wider border-2 transition-all ${
+                            tempStatus === status 
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-md' 
+                              : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                   </div>
+                </div>
+
+                <div>
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block">Assign Delivery Staff</label>
+                   <select 
+                      value={tempStaff || ''} 
+                      onChange={e => setTempStaff(e.target.value || undefined)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 px-4 text-sm font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-600 shadow-sm"
+                   >
+                      <option value="">Unassigned (Waitlist)</option>
+                      {deliveryBoys.map(boy => (
+                        <option key={boy.mobile} value={boy.mobile}>{boy.name} ({boy.mobile})</option>
+                      ))}
+                   </select>
+                </div>
+
+                <div>
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block">Dispatch Notes</label>
+                   <textarea 
+                      placeholder="Add specific instructions for staff..." 
+                      value={adminNote}
+                      onChange={e => setAdminNote(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 px-4 text-sm font-medium text-slate-800 dark:text-slate-200 h-24 resize-none focus:outline-none focus:border-blue-600 shadow-sm"
+                   />
+                </div>
+             </div>
+
+             <button 
+                onClick={handleUpdateTask}
+                className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3"
+             >
+                <i className="fas fa-paper-plane"></i> Save Task Updates
+             </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Business Control</h2>
         <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 transition-transform active:scale-90"><i className="fas fa-arrow-left"></i></button>
@@ -338,20 +388,34 @@ const Admin: React.FC<AdminProps> = ({
       {activeTab === 'Orders' && (
         <div className="space-y-4 animate-in fade-in">
           {orders.map(o => (
-            <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border flex flex-col cursor-pointer transition-colors shadow-sm border-slate-100 dark:border-slate-700 hover:border-blue-200 text-left">
-              <div className="flex justify-between items-start">
+            <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border flex flex-col cursor-pointer transition-all shadow-sm border-slate-100 dark:border-slate-700 hover:border-blue-200 text-left relative overflow-hidden active:scale-[0.98]">
+              {o.assignedToName && (
+                <div className="absolute top-0 right-0 px-3 py-1 bg-green-500 text-white text-[8px] font-black uppercase tracking-widest rounded-bl-xl shadow-sm">
+                  <i className="fas fa-truck-fast mr-1"></i> Assigned: {o.assignedToName}
+                </div>
+              )}
+              <div className="flex justify-between items-start pt-2">
                 <div className="flex-1">
-                  <p className="font-bold text-sm text-slate-900 dark:text-slate-100">{o.userName}</p>
-                  <p className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-wider mb-1">{o.productSummary || 'Refill Order'}</p>
-                  <p className="text-[9px] text-slate-400 font-bold">{o.date} • {o.id}</p>
+                  <p className="font-black text-sm text-slate-900 dark:text-slate-100">{o.userName}</p>
+                  <p className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-wider mb-2 mt-0.5">{o.productSummary || 'Water Order'}</p>
+                  <div className="flex items-center gap-3">
+                    <p className="text-[9px] text-slate-400 font-bold">{o.date}</p>
+                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${o.status === 'Pending' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}>{o.status}</span>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-black text-slate-900 dark:text-white">₹{o.total}</p>
-                  <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${o.status === 'Pending' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}>{o.status}</span>
+                  <p className="text-xl font-black text-slate-900 dark:text-white">₹{o.total}</p>
+                  <p className="text-[8px] text-slate-400 font-bold uppercase">{o.paymentMethod}</p>
                 </div>
               </div>
             </div>
           ))}
+          {orders.length === 0 && (
+            <div className="py-20 text-center opacity-40">
+              <i className="fas fa-clipboard-list text-4xl mb-3"></i>
+              <p className="text-xs font-bold uppercase tracking-widest">No orders in database</p>
+            </div>
+          )}
         </div>
       )}
 

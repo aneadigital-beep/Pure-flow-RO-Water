@@ -10,9 +10,8 @@ export interface AIResponse {
  * Service to interact with Gemini API with Google Cloud Search Grounding.
  */
 export const getWaterAdvice = async (prompt: string): Promise<AIResponse> => {
-  const apiKey = process.env.API_KEY;
-  
-  if (!apiKey || apiKey.trim() === "") {
+  // Using process.env.API_KEY directly for initialization as per coding guidelines
+  if (!process.env.API_KEY || process.env.API_KEY.trim() === "") {
     return {
       text: "I am currently disconnected from my AI knowledge base. Please contact support or check back later.",
       sources: []
@@ -20,7 +19,8 @@ export const getWaterAdvice = async (prompt: string): Promise<AIResponse> => {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    // Correct initialization: always use new GoogleGenAI({apiKey: process.env.API_KEY});
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -50,6 +50,7 @@ export const getWaterAdvice = async (prompt: string): Promise<AIResponse> => {
       },
     });
 
+    // Accessing .text property directly (correct per guidelines)
     const text = response.text || "I processed your request but couldn't generate a clear response. How else can I help?";
     
     const sources: { title: string; uri: string }[] = [];
