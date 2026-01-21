@@ -30,15 +30,6 @@ export const PRODUCTS: Product[] = [
     category: 'subscription'
   },
   {
-    id: 'p4',
-    name: 'Manual Hand Pump',
-    description: 'Food-grade manual pump for easy water dispensing.',
-    price: 150,
-    unit: 'Piece',
-    image: 'https://images.unsplash.com/photo-1615461066841-6116ecaabb04?auto=format&fit=crop&q=80&w=400',
-    category: 'accessory'
-  },
-  {
     id: 'p5',
     name: 'Automatic Dispenser',
     description: 'Quiet, USB-rechargeable electric water pump.',
