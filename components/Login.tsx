@@ -35,7 +35,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
     if (errorMessage) setErrorMessage('');
   }, [pin, entryValue, verifyName, verifyPincode]);
 
-  const normalizeId = useCallback((id: string) => id.replace(/\D/g, '').trim(), []);
+  const normalizeId = useCallback((id: string | undefined | null) => (id || '').replace(/\D/g, '').trim(), []);
 
   const handleEntrySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +45,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
     const searchTerm = normalizeId(entryValue);
 
     setTimeout(() => {
-      const user = registeredUsers.find(u => normalizeId(u.mobile || u.email || '') === searchTerm);
+      const user = registeredUsers.find(u => normalizeId(u.mobile || u.email) === searchTerm);
       setIsLoading(false);
       
       if (user) {
@@ -137,6 +137,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
     }
   };
 
+  const brandColor = 'bg-blue-600';
+  const textColor = 'text-blue-600';
+  const themeClass = 'blue';
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-blue-50 dark:bg-slate-950 px-6 py-12 transition-colors duration-500">
       <style>{`
@@ -152,8 +156,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
         
         {step !== 3 && step !== 5 && step !== 6 && (
           <div className="mb-10 flex flex-col items-center animate-in fade-in duration-500">
-            <div className="h-20 w-20 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-xl transition-transform hover:scale-110 duration-500">
-              <i className="fas fa-droplet text-3xl text-white"></i>
+            <div className={`h-20 w-20 ${brandColor} rounded-2xl flex items-center justify-center mb-6 shadow-xl transition-transform hover:scale-110 duration-500`}>
+              <i className={`fas fa-droplet text-3xl text-white`}></i>
             </div>
             <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white uppercase leading-tight text-center">
               PUNGANUR AQUAFLOW
@@ -174,12 +178,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
                 </div>
                 
                 <div className="relative group">
-                  <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-900 dark:text-white font-black text-xl">+91</span>
+                  <span className={`absolute left-6 top-1/2 -translate-y-1/2 text-slate-900 dark:text-white font-black text-xl`}>+91</span>
                   <input
                     type="tel"
                     value={entryValue}
                     onChange={(e) => setEntryValue(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-6 pl-20 pr-4 text-slate-900 dark:text-white text-xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all font-bold shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-6 pl-20 pr-4 text-slate-900 dark:text-white text-xl focus:outline-none focus:ring-4 focus:ring-${themeClass}-500/5 focus:border-${themeClass}-600 transition-all font-bold shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500`}
                     required autoFocus
                   />
                 </div>
@@ -190,7 +194,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
               <button
                 type="submit"
                 disabled={entryValue.length < 10 || isLoading}
-                className="w-full bg-blue-600 hover:opacity-90 text-white py-6 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                className={`w-full ${brandColor} hover:opacity-90 text-white py-6 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2`}
               >
                 {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Get Started'}
               </button>
@@ -202,7 +206,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
           <form onSubmit={handleReturningAuthSubmit} className="w-full space-y-8 animate-in fade-in zoom-in-95 duration-500">
             <div className="text-center">
               <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-widest font-black">Authentication Required</p>
-              <p className="text-lg font-bold text-blue-600 mt-1">{existingUser?.name}</p>
+              <p className={`text-lg font-bold ${textColor} mt-1`}>{existingUser?.name}</p>
             </div>
 
             <div className={`flex flex-col items-center ${pinError ? 'animate-shake' : ''}`}>
@@ -212,7 +216,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="••••"
-                className={`w-full bg-slate-50 dark:bg-slate-950 border-2 ${pinError ? 'border-red-500' : 'border-slate-100 dark:border-slate-800'} rounded-2xl py-6 text-center text-3xl tracking-[0.8rem] font-bold text-blue-600 focus:outline-none focus:border-blue-600 transition-colors shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500`}
+                className={`w-full bg-slate-50 dark:bg-slate-950 border-2 ${pinError ? 'border-red-500' : 'border-slate-100 dark:border-slate-800'} rounded-2xl py-6 text-center text-3xl tracking-[0.8rem] font-bold ${textColor} focus:outline-none focus:border-${themeClass}-600 transition-colors shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500`}
                 required autoFocus
               />
               {errorMessage && <p className="text-red-500 text-[10px] font-bold mt-3 animate-in fade-in">{errorMessage}</p>}
@@ -222,7 +226,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
               <button
                 type="submit"
                 disabled={pin.length < 4 || isLoading}
-                className="w-full bg-blue-600 text-white py-6 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 disabled:opacity-50"
+                className={`w-full ${brandColor} text-white py-6 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 disabled:opacity-50`}
               >
                 {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Verify PIN'}
               </button>
@@ -249,17 +253,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
             
             <div>
               <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">Full Name (as registered)</label>
-              <input type="text" value={verifyName} onChange={(e) => setVerifyName(e.target.value)} placeholder="Full Name" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-blue-600 text-slate-900 dark:text-white font-bold shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+              <input type="text" value={verifyName} onChange={(e) => setVerifyName(e.target.value)} placeholder="Full Name" className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-${themeClass}-600 text-slate-900 dark:text-white font-bold shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500`} required />
             </div>
             
             <div>
               <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">Registered Pincode</label>
-              <input type="tel" value={verifyPincode} onChange={(e) => setVerifyPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit PIN" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-blue-600 text-slate-900 dark:text-white font-bold shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+              <input type="tel" value={verifyPincode} onChange={(e) => setVerifyPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit PIN" className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-${themeClass}-600 text-slate-900 dark:text-white font-bold shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500`} required />
             </div>
 
             {errorMessage && <p className="text-red-500 text-[10px] font-bold text-center animate-shake">{errorMessage}</p>}
 
-            <button type="submit" disabled={isLoading} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">
+            <button type="submit" disabled={isLoading} className={`w-full ${brandColor} text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all`}>
               {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Verify Identity'}
             </button>
             <button type="button" onClick={() => setStep(4)} className="w-full text-[10px] text-slate-400 font-black uppercase tracking-widest text-center">Go Back</button>
@@ -276,17 +280,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">New 4-Digit PIN</label>
-                <input type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="••••" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-center tracking-[0.8em] font-black text-xl text-slate-900 dark:text-white focus:border-blue-600 shadow-sm placeholder:text-slate-400" required />
+                <input type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="••••" className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-center tracking-[0.8em] font-black text-xl text-slate-900 dark:text-white focus:border-${themeClass}-600 shadow-sm placeholder:text-slate-400`} required />
               </div>
               <div>
                 <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">Confirm New PIN</label>
-                <input type="password" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="••••" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-center tracking-[0.8em] font-black text-xl text-slate-900 dark:text-white focus:border-blue-600 shadow-sm placeholder:text-slate-400" required />
+                <input type="password" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="••••" className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-center tracking-[0.8em] font-black text-xl text-slate-900 dark:text-white focus:border-${themeClass}-600 shadow-sm placeholder:text-slate-400`} required />
               </div>
             </div>
 
             {errorMessage && <p className="text-red-500 text-[10px] font-bold text-center animate-shake">{errorMessage}</p>}
 
-            <button type="submit" disabled={pin.length < 4 || isLoading} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">
+            <button type="submit" disabled={pin.length < 4 || isLoading} className={`w-full ${brandColor} text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all`}>
               {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Reset & Login'}
             </button>
           </form>
@@ -303,7 +307,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
               <div className="space-y-4">
                 <div>
                   <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">Full Name</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter name" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-blue-600 text-slate-900 dark:text-white font-bold transition-all shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter name" className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-${themeClass}-600 text-slate-900 dark:text-white font-bold transition-all shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500`} required />
                 </div>
                 
                 <div>
@@ -311,7 +315,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
                   <select 
                     value={selectedZone} 
                     onChange={(e) => setSelectedZone(e.target.value)} 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-blue-600 text-slate-900 dark:text-white font-bold transition-all shadow-sm appearance-none outline-none"
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-${themeClass}-600 text-slate-900 dark:text-white font-bold transition-all shadow-sm appearance-none outline-none`}
                     required
                   >
                     <option value="">-- Choose Street/Zone --</option>
@@ -323,7 +327,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
 
                 <div>
                   <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">Home Address</label>
-                  <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Building, Door No, Street..." className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm h-20 focus:border-blue-600 resize-none text-slate-900 dark:text-white font-bold transition-all shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+                  <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Building, Door No, Street..." className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm h-20 focus:border-${themeClass}-600 resize-none text-slate-900 dark:text-white font-bold transition-all shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500`} required />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
@@ -347,7 +351,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
               <button 
                 type="submit" 
                 disabled={!name || !address || !selectedZone || pincode.length < 6 || pin.length < 4}
-                className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl mt-6 active:scale-95 transition-all disabled:opacity-30"
+                className={`w-full ${brandColor} text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl mt-6 active:scale-95 transition-all disabled:opacity-30`}
               >
                 Complete Registration
               </button>

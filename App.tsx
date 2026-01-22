@@ -62,7 +62,7 @@ const App: React.FC = () => {
   const [appLoading, setAppLoading] = useState(true);
   const [isCloudSynced, setIsCloudSynced] = useState(false);
 
-  const normalizeId = useCallback((id: string) => id.replace(/\D/g, '').trim(), []);
+  const normalizeId = useCallback((id: string | undefined | null) => (id || '').replace(/\D/g, '').trim(), []);
 
   useEffect(() => {
     try {
@@ -93,7 +93,7 @@ const App: React.FC = () => {
     };
     setNotifications(prev => [newNotif, ...prev]);
     
-    const isRelevantUser = !forAdmin && user && normalizeId(user.mobile || user.email || '') === normalizeId(userMobile || '');
+    const isRelevantUser = !forAdmin && user && normalizeId(user.mobile || user.email) === normalizeId(userMobile);
     const isRelevantAdmin = forAdmin && user?.isAdmin;
     
     if (isRelevantUser || isRelevantAdmin) {
@@ -120,7 +120,7 @@ const App: React.FC = () => {
 
         if (cloudUsers) {
           cloudUsers.forEach(u => {
-            const id = normalizeId(u.mobile || u.email || '');
+            const id = normalizeId(u.mobile || u.email);
             if (id) upsertDocument(COLLECTIONS.USERS, id, u);
           });
         }
@@ -188,7 +188,7 @@ const App: React.FC = () => {
   }, [normalizeId, addNotification]);
 
   const handleUpdateUser = async (updatedUser: User) => {
-    const id = normalizeId(updatedUser.mobile || updatedUser.email || 'guest');
+    const id = normalizeId(updatedUser.mobile || updatedUser.email);
     setUser(updatedUser);
     await upsertDocument(COLLECTIONS.USERS, id, updatedUser);
     await syncUserToSupabase(updatedUser);
@@ -197,7 +197,7 @@ const App: React.FC = () => {
 
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string }) => {
     const ADMIN_ID = '9999999999';
-    const id = normalizeId(creds.mobile || creds.email || 'guest');
+    const id = normalizeId(creds.mobile || creds.email);
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
     const isAdmin = id === ADMIN_ID || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin; 
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy;
@@ -239,7 +239,7 @@ const App: React.FC = () => {
     
     const newOrder: Order = {
       id: orderId,
-      userMobile: normalizeId(user.mobile || user.email || ''),
+      userMobile: normalizeId(user.mobile || user.email),
       userName: user.name, userAddress: user.address, userZipcode: user.pincode,
       productSummary, date: now.toLocaleDateString(), createdAt: now.toISOString(),
       total: subtotal + deliveryFee, items: [...cart], status: 'Pending', paymentMethod,
@@ -272,7 +272,7 @@ const App: React.FC = () => {
   const assignOrder = useCallback(async (orderId: string, staffMobile: string | undefined) => {
     const orderToUpdate = allOrders.find(o => o.id === orderId);
     if (!orderToUpdate) return;
-    const staff = registeredUsers.find(u => normalizeId(u.mobile || u.email || '') === normalizeId(staffMobile || ''));
+    const staff = registeredUsers.find(u => normalizeId(u.mobile || u.email) === normalizeId(staffMobile));
     const assignmentData = { ...orderToUpdate, assignedToMobile: staffMobile, assignedToName: staff?.name };
     await upsertDocument(COLLECTIONS.ORDERS, orderId, assignmentData);
     await syncOrderToSupabase(assignmentData);
@@ -355,8 +355,8 @@ const App: React.FC = () => {
     setActiveToast({ title: "Staff Removed", message: "Account deleted from system." });
   }, [normalizeId]);
 
-  const userOrders = useMemo(() => allOrders.filter(o => normalizeId(o.userMobile) === normalizeId(user?.mobile || user?.email || '')), [allOrders, user, normalizeId]);
-  const relevantNotifications = useMemo(() => notifications.filter(n => (n.forAdmin && user?.isAdmin) || (!n.forAdmin && normalizeId(n.userMobile || '') === normalizeId(user?.mobile || user?.email || ''))), [notifications, user, normalizeId]);
+  const userOrders = useMemo(() => allOrders.filter(o => normalizeId(o.userMobile) === normalizeId(user?.mobile || user?.email)), [allOrders, user, normalizeId]);
+  const relevantNotifications = useMemo(() => notifications.filter(n => (n.forAdmin && user?.isAdmin) || (!n.forAdmin && normalizeId(n.userMobile) === normalizeId(user?.mobile || user?.email))), [notifications, user, normalizeId]);
   const unreadCount = useMemo(() => relevantNotifications.filter(n => !n.isRead).length, [relevantNotifications]);
 
   if (appLoading) return <SplashScreen />;
@@ -398,7 +398,7 @@ const App: React.FC = () => {
             {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} onSupportClick={() => setCurrentView('support')} onUpdateUser={handleUpdateUser} unreadNotifCount={unreadCount} />}
             {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} onCancelOrder={(id) => updateOrderStatus(id, 'Cancelled', 'Cancelled by User')} onHelpClick={() => setCurrentView('support')} />}
             {currentView === 'support' && <Support onBack={() => setCurrentView('profile')} />}
-            {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile || '') === normalizeId(user.mobile || user.email || ''))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
+            {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile) === normalizeId(user.mobile || user.email))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
             {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} townZones={townZones} onUpdateDeliveryFee={updateDeliveryFee} onUpdateUpiId={updateUpiId} onUpdateTownZones={updateTownZones} onAssignOrder={assignOrder} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} onAddStaff={handleAddStaff} onUpdateStaffRole={handleUpdateStaffRole} onUpdateAdminRole={handleUpdateAdminRole} onUpdateStaffAreas={handleUpdateStaffAreas} onDeleteStaff={handleDeleteStaff} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
             {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
           </div>
