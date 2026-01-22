@@ -115,17 +115,33 @@ const App: React.FC = () => {
 
         if (cloudOrders) {
           setIsCloudSynced(true);
-          cloudOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
+          // Batch local update
+          const existing = [...allOrders];
+          cloudOrders.forEach(o => {
+            const idx = existing.findIndex(e => e.id === o.id);
+            if (idx === -1) existing.push(o);
+            else existing[idx] = o;
+            upsertDocument(COLLECTIONS.ORDERS, o.id, o);
+          });
+          setAllOrders(existing.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
         }
 
         if (cloudUsers) {
+          const existing = [...registeredUsers];
           cloudUsers.forEach(u => {
             const id = normalizeId(u.mobile || u.email);
-            if (id) upsertDocument(COLLECTIONS.USERS, id, u);
+            if (id) {
+              const idx = existing.findIndex(e => normalizeId(e.mobile || e.email) === id);
+              if (idx === -1) existing.push(u);
+              else existing[idx] = u;
+              upsertDocument(COLLECTIONS.USERS, id, u);
+            }
           });
+          setRegisteredUsers(existing);
         }
 
         if (cloudProducts && cloudProducts.length > 0) {
+          setProducts(cloudProducts);
           cloudProducts.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
           localStorage.setItem('pf_products_initialized', 'true');
         }
@@ -144,8 +160,14 @@ const App: React.FC = () => {
     };
     loadCloudData();
 
-    const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => setAllOrders(data as Order[]), [orderBy('createdAt', 'desc')]);
-    const unsubUsers = syncCollection(COLLECTIONS.USERS, (data) => setRegisteredUsers(data as User[]));
+    const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => {
+      setAllOrders(data as Order[]);
+    }, [orderBy('createdAt', 'desc')]);
+
+    const unsubUsers = syncCollection(COLLECTIONS.USERS, (data) => {
+      setRegisteredUsers(data as User[]);
+    });
+
     const unsubProducts = syncCollection(COLLECTIONS.PRODUCTS, (data) => {
       const initialized = localStorage.getItem('pf_products_initialized');
       if (data && data.length > 0) {
@@ -165,12 +187,43 @@ const App: React.FC = () => {
       if (zonesSetting) setTownZones(zonesSetting.value);
     });
 
+    // Subscribing to REALTIME changes for Admin/Staff visibility
     const orderChannel = subscribeToTable('orders', (payload) => {
       if (payload.new) {
+        // Sync local storage
         upsertDocument(COLLECTIONS.ORDERS, payload.new.id, payload.new);
+        
+        // Update state immediately if it's a new order or a status change
+        setAllOrders(prev => {
+          const idx = prev.findIndex(o => o.id === payload.new.id);
+          let next;
+          if (idx === -1) {
+            next = [payload.new as Order, ...prev];
+            addNotification('New Order', `Received a new order #${payload.new.id}`, 'order', true);
+          } else {
+            next = [...prev];
+            next[idx] = payload.new as Order;
+          }
+          return next.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        });
+
         if (payload.eventType === 'UPDATE' && payload.new.status !== payload.old?.status) {
            addNotification('Order Updated', `Order #${payload.new.id} is now ${payload.new.status}`, 'system', false, payload.new.userMobile);
         }
+      }
+    });
+
+    const userChannel = subscribeToTable('users', (payload) => {
+      if (payload.new) {
+        const id = normalizeId(payload.new.mobile || payload.new.email);
+        upsertDocument(COLLECTIONS.USERS, id, payload.new);
+        setRegisteredUsers(prev => {
+           const idx = prev.findIndex(u => normalizeId(u.mobile || u.email) === id);
+           if (idx === -1) return [payload.new as User, ...prev];
+           const next = [...prev];
+           next[idx] = payload.new as User;
+           return next;
+        });
       }
     });
 
@@ -182,6 +235,7 @@ const App: React.FC = () => {
       clearTimeout(splashTimer);
       unsubOrders(); unsubUsers(); unsubProducts(); unsubSettings();
       supabase.removeChannel(orderChannel);
+      supabase.removeChannel(userChannel);
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
     };
@@ -199,8 +253,9 @@ const App: React.FC = () => {
     const ADMIN_IDS = ['9999999999', '9620674013'];
     const id = normalizeId(creds.mobile || creds.email);
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
+    
     const isAdmin = ADMIN_IDS.includes(id) || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin; 
-    const isDeliveryBoy = existingCloudUser?.isDeliveryBoy;
+    const isDeliveryBoy = existingCloudUser?.isDeliveryBoy || false;
 
     const newUser: User = { 
       mobile: creds.mobile, 
@@ -211,12 +266,23 @@ const App: React.FC = () => {
       pincode: creds.pincode || existingCloudUser?.pincode || '', 
       selectedZone: creds.selectedZone || existingCloudUser?.selectedZone || '',
       avatar: creds.avatar || existingCloudUser?.avatar, 
-      isLoggedIn: true, isAdmin, isDeliveryBoy,
+      isLoggedIn: true, 
+      isAdmin: isAdmin || false, 
+      isDeliveryBoy,
       preferredAreas: existingCloudUser?.preferredAreas || []
     };
     
     setUser(newUser);
+    // Update local state and storage
     await upsertDocument(COLLECTIONS.USERS, id, newUser);
+    setRegisteredUsers(prev => {
+      const idx = prev.findIndex(u => normalizeId(u.mobile || u.email) === id);
+      if (idx === -1) return [newUser, ...prev];
+      const next = [...prev];
+      next[idx] = newUser;
+      return next;
+    });
+
     await syncUserToSupabase(newUser);
     
     if (isAdmin) setCurrentView('admin');
@@ -247,8 +313,14 @@ const App: React.FC = () => {
       history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, note: 'Order placed' }]
     };
 
+    // Save locally first
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
-    await syncOrderToSupabase(newOrder);
+    setAllOrders(prev => [newOrder, ...prev].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    
+    // Cloud sync
+    const success = await syncOrderToSupabase(newOrder);
+    setIsCloudSynced(success);
+
     setCart([]);
     addNotification('Order Confirmed', `Order #${orderId} scheduled for ${deliverySlot}.`, 'order', false, newOrder.userMobile);
     return newOrder;
@@ -264,6 +336,8 @@ const App: React.FC = () => {
       history: [...orderToUpdate.history, { status, timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, note: note || `Status updated to ${status}` }]
     };
 
+    // Update state immediately
+    setAllOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
     await upsertDocument(COLLECTIONS.ORDERS, orderId, updatedOrder);
     await syncOrderToSupabase(updatedOrder);
     addNotification(`Order ${status}`, `Order ${orderId} is now ${status.toLowerCase()}.`, 'system', false, orderToUpdate.userMobile);
@@ -274,6 +348,8 @@ const App: React.FC = () => {
     if (!orderToUpdate) return;
     const staff = registeredUsers.find(u => normalizeId(u.mobile || u.email) === normalizeId(staffMobile));
     const assignmentData = { ...orderToUpdate, assignedToMobile: staffMobile, assignedToName: staff?.name };
+    
+    setAllOrders(prev => prev.map(o => o.id === orderId ? assignmentData : o));
     await upsertDocument(COLLECTIONS.ORDERS, orderId, assignmentData);
     await syncOrderToSupabase(assignmentData);
     if (staffMobile) addNotification('New Task', `Order ${orderId} assigned to you.`, 'delivery', false, staffMobile);
@@ -281,18 +357,21 @@ const App: React.FC = () => {
 
   const handleAddProduct = useCallback(async (product: Product) => {
     await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
+    setProducts(prev => [product, ...prev]);
     await syncProductToSupabase(product);
     setActiveToast({ title: "Product Added", message: `${product.name} added to catalog.` });
   }, []);
 
   const handleUpdateProduct = useCallback(async (product: Product) => {
     await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
+    setProducts(prev => prev.map(p => p.id === product.id ? product : p));
     await syncProductToSupabase(product);
     setActiveToast({ title: "Product Updated", message: `${product.name} details saved.` });
   }, []);
 
   const handleDeleteProduct = useCallback(async (id: string) => {
     await deleteDocument(COLLECTIONS.PRODUCTS, id);
+    setProducts(prev => prev.filter(p => p.id !== id));
     await deleteProductFromSupabase(id);
     setActiveToast({ title: "Product Removed", message: "Item deleted successfully." });
   }, []);
@@ -321,7 +400,16 @@ const App: React.FC = () => {
     const newStaff: User = existing 
       ? { ...existing as User, isDeliveryBoy: true, name, preferredAreas: [primaryStreet] } 
       : { mobile, name, address: '', pincode: '', selectedZone: primaryStreet, isLoggedIn: false, isDeliveryBoy: true, preferredAreas: [primaryStreet] };
+    
     await upsertDocument(COLLECTIONS.USERS, id, newStaff);
+    setRegisteredUsers(prev => {
+      const idx = prev.findIndex(u => normalizeId(u.mobile || u.email) === id);
+      if (idx === -1) return [newStaff, ...prev];
+      const next = [...prev];
+      next[idx] = newStaff;
+      return next;
+    });
+
     await syncUserToSupabase(newStaff);
     setActiveToast({ title: "Staff Partner Added", message: `${name} is now registered for ${primaryStreet}.` });
   }, [normalizeId]);
@@ -330,6 +418,7 @@ const App: React.FC = () => {
     const id = normalizeId(mobile);
     await updateDocument(COLLECTIONS.USERS, id, { isDeliveryBoy: isDelivery });
     const updated = await getDocument(COLLECTIONS.USERS, id) as User;
+    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || u.email) === id ? updated : u));
     await syncUserToSupabase(updated);
   }, [normalizeId]);
 
@@ -337,6 +426,7 @@ const App: React.FC = () => {
     const id = normalizeId(mobile);
     await updateDocument(COLLECTIONS.USERS, id, { isAdmin: isAdmin });
     const updated = await getDocument(COLLECTIONS.USERS, id) as User;
+    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || u.email) === id ? updated : u));
     await syncUserToSupabase(updated);
   }, [normalizeId]);
 
@@ -344,6 +434,7 @@ const App: React.FC = () => {
     const id = normalizeId(mobile);
     await updateDocument(COLLECTIONS.USERS, id, { preferredAreas: areas });
     const updated = await getDocument(COLLECTIONS.USERS, id) as User;
+    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || u.email) === id ? updated : u));
     await syncUserToSupabase(updated);
     setActiveToast({ title: "Areas Updated", message: "Staff coverage zones saved." });
   }, [normalizeId]);
@@ -351,6 +442,7 @@ const App: React.FC = () => {
   const handleDeleteStaff = useCallback(async (mobile: string) => {
     const id = normalizeId(mobile);
     await deleteDocument(COLLECTIONS.USERS, id);
+    setRegisteredUsers(prev => prev.filter(u => normalizeId(u.mobile || u.email) !== id));
     await deleteUserFromSupabase(id);
     setActiveToast({ title: "Staff Removed", message: "Account deleted from system." });
   }, [normalizeId]);

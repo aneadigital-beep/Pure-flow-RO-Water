@@ -12,17 +12,32 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   }
 });
 
+/**
+ * Utility to ensure objects are clean and serializable for Supabase
+ */
+const preparePayload = (obj: any) => {
+  const clean: any = {};
+  Object.keys(obj).forEach(key => {
+    if (obj[key] !== undefined) {
+      // Supabase handles arrays/objects well if the column is jsonb, 
+      // but we ensure it's a plain object/array.
+      clean[key] = obj[key];
+    }
+  });
+  return clean;
+};
+
 export const syncOrderToSupabase = async (order: any) => {
   try {
-    const { lastUpdated, ...cleanOrder } = order;
-    const payload = {
-      ...cleanOrder,
-      items: typeof cleanOrder.items === 'object' ? cleanOrder.items : JSON.parse(cleanOrder.items || '[]'),
-      history: typeof cleanOrder.history === 'object' ? cleanOrder.history : JSON.parse(cleanOrder.history || '[]'),
-    };
+    const payload = preparePayload(order);
     const { error } = await supabase.from('orders').upsert(payload, { onConflict: 'id' });
-    return !error;
+    if (error) {
+      console.error('Supabase Order Sync Error:', error.message, error.details);
+      return false;
+    }
+    return true;
   } catch (err) {
+    console.error('Supabase Order Sync Critical Failure:', err);
     return false;
   }
 };
@@ -31,10 +46,18 @@ export const syncUserToSupabase = async (user: any) => {
   if (!user) return false;
   try {
     const userId = (user.mobile || user.email || 'unknown').toString().trim();
+    // Remove transient UI states before syncing
     const { isLoggedIn, lastUpdated, ...dataToSync } = user;
-    const { error } = await supabase.from('users').upsert({ ...dataToSync, id: userId }, { onConflict: 'id' });
-    return !error;
+    const payload = preparePayload({ ...dataToSync, id: userId });
+    
+    const { error } = await supabase.from('users').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.error('Supabase User Sync Error:', error.message, error.details);
+      return false;
+    }
+    return true;
   } catch (err) {
+    console.error('Supabase User Sync Critical Failure:', err);
     return false;
   }
 };
@@ -50,9 +73,9 @@ export const deleteUserFromSupabase = async (id: string) => {
 
 export const syncProductToSupabase = async (product: any) => {
   try {
-    const { lastUpdated, ...dataToSync } = product;
-    const { error } = await supabase.from('products').upsert(dataToSync, { onConflict: 'id' });
-    if (error) console.error('Product Sync Error:', error);
+    const payload = preparePayload(product);
+    const { error } = await supabase.from('products').upsert(payload, { onConflict: 'id' });
+    if (error) console.error('Product Sync Error:', error.message);
     return !error;
   } catch (err) {
     return false;
@@ -71,6 +94,7 @@ export const deleteProductFromSupabase = async (id: string) => {
 export const syncSettingToSupabase = async (id: string, value: any) => {
   try {
     const { error } = await supabase.from('settings').upsert({ id, value }, { onConflict: 'id' });
+    if (error) console.error('Settings Sync Error:', error.message);
     return !error;
   } catch (err) {
     return false;
@@ -117,7 +141,11 @@ export const subscribeToTable = (tableName: string, callback: (payload: any) => 
   const channel = supabase
     .channel(`public:${tableName}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: tableName }, (payload) => callback(payload))
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log(`Realtime: Subscribed to ${tableName}`);
+      }
+    });
     
   return channel;
 };
