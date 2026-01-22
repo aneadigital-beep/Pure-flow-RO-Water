@@ -174,7 +174,7 @@ const App: React.FC = () => {
       if (zonesSetting) setTownZones(zonesSetting.value);
     });
 
-    // Subscribing to REALTIME changes for Admin/Staff visibility
+    // Real-time Order Watcher
     const orderChannel = subscribeToTable('orders', (payload) => {
       if (payload.new) {
         const newOrder = payload.new as Order;
@@ -199,6 +199,7 @@ const App: React.FC = () => {
       }
     });
 
+    // Real-time User Watcher
     const userChannel = subscribeToTable('users', (payload) => {
       if (payload.new) {
         const newUser = payload.new as User;
@@ -232,18 +233,22 @@ const App: React.FC = () => {
     const id = normalizeId(updatedUser.mobile || updatedUser.email);
     setUser(updatedUser);
     await upsertDocument(COLLECTIONS.USERS, id, updatedUser);
-    await syncUserToSupabase(updatedUser);
-    setActiveToast({ title: "Profile Updated", message: "Successfully synced to cloud." });
+    const success = await syncUserToSupabase(updatedUser);
+    if (success) {
+      setActiveToast({ title: "Profile Updated", message: "Successfully synced to cloud." });
+    } else {
+      setActiveToast({ title: "Sync Failed", message: "Updating profile locally. Cloud sync pending." });
+    }
   };
 
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string }) => {
     const ADMIN_IDS = ['9999999999', '9620674013'];
     const id = normalizeId(creds.mobile || creds.email);
     
-    // Check locally first, then cloud if needed
+    // Check locally/cloud for roles
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
     
-    const isAdmin = ADMIN_IDS.includes(id) || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin; 
+    const isAdmin = ADMIN_IDS.includes(id) || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin || false; 
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy || false;
 
     const newUser: User = { 
@@ -256,14 +261,15 @@ const App: React.FC = () => {
       selectedZone: creds.selectedZone || existingCloudUser?.selectedZone || '',
       avatar: creds.avatar || existingCloudUser?.avatar, 
       isLoggedIn: true, 
-      isAdmin: isAdmin || false, 
+      isAdmin, 
       isDeliveryBoy,
       preferredAreas: existingCloudUser?.preferredAreas || []
     };
     
+    // UI immediate feedback
     setUser(newUser);
     
-    // Sequential update: Storage -> Local State -> Cloud
+    // Persist Locally
     await upsertDocument(COLLECTIONS.USERS, id, newUser);
     setRegisteredUsers(prev => {
       const idx = prev.findIndex(u => normalizeId(u.mobile || u.email) === id);
@@ -273,6 +279,7 @@ const App: React.FC = () => {
       return next;
     });
 
+    // Persist Cloud (MANDATORY for capturing new users)
     const syncSuccess = await syncUserToSupabase(newUser);
     setIsCloudSynced(syncSuccess);
     
@@ -312,12 +319,19 @@ const App: React.FC = () => {
       history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, note: 'Order placed' }]
     };
 
-    // Sequential persistence: Storage -> Local State -> Cloud Broadcast
+    // Sequential Save: MUST succeed locally first
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
+    
+    // Local state update for immediate UI response
     setAllOrders(prev => [newOrder, ...prev].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     
+    // Cloud Sync
     const success = await syncOrderToSupabase(newOrder);
     setIsCloudSynced(success);
+
+    if (!success) {
+      setActiveToast({ title: "Order Synced Locally", message: "Cloud sync failed. Our team will verify manually." });
+    }
 
     setCart([]);
     addNotification('Order Confirmed', `Order #${orderId} scheduled for ${deliverySlot}.`, 'order', false, newOrder.userMobile);
@@ -334,9 +348,18 @@ const App: React.FC = () => {
       history: [...orderToUpdate.history, { status, timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, note: note || `Status updated to ${status}` }]
     };
 
+    // UI Update
     setAllOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+    
+    // Local Storage
     await upsertDocument(COLLECTIONS.ORDERS, orderId, updatedOrder);
-    await syncOrderToSupabase(updatedOrder);
+    
+    // Cloud Sync
+    const success = await syncOrderToSupabase(updatedOrder);
+    if (!success) {
+      setActiveToast({ title: "Sync Error", message: "Cloud update failed. Status saved locally." });
+    }
+    
     addNotification(`Order ${status}`, `Order ${orderId} is now ${status.toLowerCase()}.`, 'system', false, orderToUpdate.userMobile);
   }, [allOrders, addNotification]);
 

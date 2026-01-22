@@ -14,26 +14,19 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 
 /**
  * Utility to ensure objects are clean and serializable for Supabase.
- * This removes undefined values and ensures arrays are flat.
+ * We convert the object to a clean JSON and back to strip 'undefined' 
+ * which Supabase/Postgres doesn't like.
  */
 const preparePayload = (obj: any) => {
   if (!obj) return {};
-  const clean: any = {};
-  Object.keys(obj).forEach(key => {
-    const val = obj[key];
-    if (val !== undefined && val !== null) {
-      // If it's an array or object, we keep it as is for jsonb columns, 
-      // but ensure it's not containing circular refs or undefineds.
-      if (Array.isArray(val)) {
-        clean[key] = val.map(item => typeof item === 'object' ? preparePayload(item) : item);
-      } else if (typeof val === 'object' && !(val instanceof Date)) {
-        clean[key] = preparePayload(val);
-      } else {
-        clean[key] = val;
-      }
-    }
-  });
-  return clean;
+  try {
+    return JSON.parse(JSON.stringify(obj, (key, value) => 
+      value === undefined ? null : value
+    ));
+  } catch (e) {
+    console.error("Payload Preparation Error:", e);
+    return obj;
+  }
 };
 
 export const syncOrderToSupabase = async (order: any) => {
@@ -43,12 +36,18 @@ export const syncOrderToSupabase = async (order: any) => {
       return false;
     }
     const payload = preparePayload(order);
-    const { error } = await supabase.from('orders').upsert(payload, { onConflict: 'id' });
+    
+    // Attempting UPSERT. Note: 'orders' table MUST have 'id' as Primary Key.
+    const { data, error } = await supabase
+      .from('orders')
+      .upsert(payload, { onConflict: 'id' })
+      .select();
+
     if (error) {
       console.error('Supabase Order Sync Error:', error.message, error.details);
       return false;
     }
-    console.log(`Supabase: Successfully synced order ${order.id}`);
+    console.log(`Supabase: Successfully synced order ${order.id}`, data);
     return true;
   } catch (err) {
     console.error('Supabase Order Sync Critical Failure:', err);
@@ -67,14 +66,19 @@ export const syncUserToSupabase = async (user: any) => {
     
     // Remove transient UI states that shouldn't live in DB
     const { isLoggedIn, lastUpdated, ...dataToSync } = user;
+    // We map 'mobile' or 'email' to 'id' for the database primary key
     const payload = preparePayload({ ...dataToSync, id: userId });
     
-    const { error } = await supabase.from('users').upsert(payload, { onConflict: 'id' });
+    const { data, error } = await supabase
+      .from('users')
+      .upsert(payload, { onConflict: 'id' })
+      .select();
+
     if (error) {
       console.error('Supabase User Sync Error:', error.message, error.details);
       return false;
     }
-    console.log(`Supabase: Successfully synced user ${userId}`);
+    console.log(`Supabase: Successfully synced user ${userId}`, data);
     return true;
   } catch (err) {
     console.error('Supabase User Sync Critical Failure:', err);
@@ -159,14 +163,14 @@ export const fetchProductsFromSupabase = async () => {
 
 export const subscribeToTable = (tableName: string, callback: (payload: any) => void) => {
   const channel = supabase
-    .channel(`public:${tableName}_channel`)
+    .channel(`public:${tableName}_realtime`)
     .on('postgres_changes', { event: '*', schema: 'public', table: tableName }, (payload) => {
-      console.log(`Realtime update on ${tableName}:`, payload.eventType);
+      console.log(`Realtime update [${tableName}]:`, payload.eventType, payload.new?.id);
       callback(payload);
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        console.log(`Realtime: Successfully subscribed to ${tableName}`);
+        console.log(`Realtime: Watching table ${tableName}`);
       }
     });
     
