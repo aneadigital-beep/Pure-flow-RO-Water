@@ -14,7 +14,8 @@ import {
   fetchProductsFromSupabase,
   deleteProductFromSupabase,
   syncSettingToSupabase,
-  fetchSettingsFromSupabase
+  fetchSettingsFromSupabase,
+  deleteUserFromSupabase
 } from './supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
@@ -25,7 +26,6 @@ import Orders from './components/Orders';
 import Admin from './components/Admin';
 import DeliveryDashboard from './components/DeliveryDashboard';
 import Notifications from './components/Notifications';
-import Assistant from './components/Assistant';
 import Support from './components/Support';
 import Toast from './components/Toast';
 import SplashScreen from './components/SplashScreen';
@@ -55,6 +55,7 @@ const App: React.FC = () => {
   });
   const [deliveryFee, setDeliveryFee] = useState<number>(DEFAULT_DELIVERY_FEE);
   const [upiId, setUpiId] = useState<string>(DEFAULT_UPI_ID);
+  const [townZones, setTownZones] = useState<string[]>([]);
   const [currentView, setCurrentView] = useState<View>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeToast, setActiveToast] = useState<{title: string, message: string} | null>(null);
@@ -63,7 +64,6 @@ const App: React.FC = () => {
 
   const normalizeId = useCallback((id: string) => id.replace(/\D/g, '').trim(), []);
 
-  // Sync user state to local storage
   useEffect(() => {
     try {
       if (user) localStorage.setItem('pureflow_user', JSON.stringify(user));
@@ -71,14 +71,12 @@ const App: React.FC = () => {
     } catch (e) {}
   }, [user]);
 
-  // Sync notifications to local storage
   useEffect(() => {
     try {
       localStorage.setItem('pureflow_notifications', JSON.stringify(notifications));
     } catch (e) {}
   }, [notifications]);
 
-  // Dark mode effect
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -103,7 +101,6 @@ const App: React.FC = () => {
     }
   }, [user, normalizeId]);
 
-  // Bootstrap data
   useEffect(() => {
     const splashTimer = setTimeout(() => setAppLoading(false), 2500);
 
@@ -138,6 +135,7 @@ const App: React.FC = () => {
             upsertDocument(COLLECTIONS.SETTINGS, s.id, s);
             if (s.id === 'deliveryFee') setDeliveryFee(Number(s.value));
             if (s.id === 'upiId') setUpiId(String(s.value));
+            if (s.id === 'townZones') setTownZones(Array.isArray(s.value) ? s.value : []);
           });
         }
       } catch (e) {
@@ -146,7 +144,6 @@ const App: React.FC = () => {
     };
     loadCloudData();
 
-    // Setup local sync listeners
     const unsubOrders = syncCollection(COLLECTIONS.ORDERS, (data) => setAllOrders(data as Order[]), [orderBy('createdAt', 'desc')]);
     const unsubUsers = syncCollection(COLLECTIONS.USERS, (data) => setRegisteredUsers(data as User[]));
     const unsubProducts = syncCollection(COLLECTIONS.PRODUCTS, (data) => {
@@ -164,20 +161,19 @@ const App: React.FC = () => {
       if (feeSetting) setDeliveryFee(feeSetting.value);
       const upiSetting = data.find(d => d.id === 'upiId');
       if (upiSetting) setUpiId(upiSetting.value);
+      const zonesSetting = data.find(d => d.id === 'townZones');
+      if (zonesSetting) setTownZones(zonesSetting.value);
     });
 
-    // Supabase Realtime Subscription
     const orderChannel = subscribeToTable('orders', (payload) => {
       if (payload.new) {
         upsertDocument(COLLECTIONS.ORDERS, payload.new.id, payload.new);
-        // Notification logic for updates
         if (payload.eventType === 'UPDATE' && payload.new.status !== payload.old?.status) {
            addNotification('Order Updated', `Order #${payload.new.id} is now ${payload.new.status}`, 'system', false, payload.new.userMobile);
         }
       }
     });
 
-    // Network status listener
     const updateOnlineStatus = () => setIsCloudSynced(navigator.onLine);
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
@@ -194,20 +190,16 @@ const App: React.FC = () => {
   const handleUpdateUser = async (updatedUser: User) => {
     const id = normalizeId(updatedUser.mobile || updatedUser.email || 'guest');
     setUser(updatedUser);
-    
-    // Update both registered users list and individual doc
     await upsertDocument(COLLECTIONS.USERS, id, updatedUser);
     await syncUserToSupabase(updatedUser);
-    
     setActiveToast({ title: "Profile Updated", message: "Successfully synced to cloud." });
   };
 
-  const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; avatar?: string; pin?: string }) => {
+  const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string }) => {
     const ADMIN_ID = '9999999999';
     const id = normalizeId(creds.mobile || creds.email || 'guest');
-    
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
-    const isAdmin = id === ADMIN_ID || creds.email?.includes('admin@pureflow.com') || existingCloudUser?.isAdmin; 
+    const isAdmin = id === ADMIN_ID || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin; 
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy;
 
     const newUser: User = { 
@@ -217,8 +209,10 @@ const App: React.FC = () => {
       name: creds.name || existingCloudUser?.name || 'User', 
       address: creds.address || existingCloudUser?.address || '', 
       pincode: creds.pincode || existingCloudUser?.pincode || '', 
+      selectedZone: creds.selectedZone || existingCloudUser?.selectedZone || '',
       avatar: creds.avatar || existingCloudUser?.avatar, 
-      isLoggedIn: true, isAdmin, isDeliveryBoy 
+      isLoggedIn: true, isAdmin, isDeliveryBoy,
+      preferredAreas: existingCloudUser?.preferredAreas || []
     };
     
     setUser(newUser);
@@ -236,8 +230,8 @@ const App: React.FC = () => {
     setCart([]);
   };
 
-  const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online', deliverySlot: DeliverySlot) => {
-    if (!user || cart.length === 0) return;
+  const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online', deliverySlot: DeliverySlot): Promise<Order | null> => {
+    if (!user || cart.length === 0) return null;
     const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
     const productSummary = cart.map(item => `${item.quantity}x ${item.product.name}`).join(', ');
     const now = new Date();
@@ -256,8 +250,8 @@ const App: React.FC = () => {
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
     await syncOrderToSupabase(newOrder);
     setCart([]);
-    setCurrentView('orders');
     addNotification('Order Confirmed', `Order #${orderId} scheduled for ${deliverySlot}.`, 'order', false, newOrder.userMobile);
+    return newOrder;
   };
 
   const updateOrderStatus = useCallback(async (orderId: string, status: Order['status'], note?: string) => {
@@ -315,23 +309,50 @@ const App: React.FC = () => {
     await syncSettingToSupabase('upiId', id);
   }, []);
 
-  const handleAddStaff = useCallback(async (mobile: string, name: string) => {
+  const updateTownZones = useCallback(async (zones: string[]) => {
+    setTownZones(zones);
+    await upsertDocument(COLLECTIONS.SETTINGS, 'townZones', { value: zones });
+    await syncSettingToSupabase('townZones', zones);
+  }, []);
+
+  const handleAddStaff = useCallback(async (mobile: string, name: string, primaryStreet: string) => {
     const id = normalizeId(mobile);
     const existing = await getDocument(COLLECTIONS.USERS, id);
-    const newStaff: User = existing ? { ...existing as User, isDeliveryBoy: true, name } : { mobile, name, address: '', pincode: '', isLoggedIn: false, isDeliveryBoy: true };
+    const newStaff: User = existing 
+      ? { ...existing as User, isDeliveryBoy: true, name, preferredAreas: [primaryStreet] } 
+      : { mobile, name, address: '', pincode: '', selectedZone: primaryStreet, isLoggedIn: false, isDeliveryBoy: true, preferredAreas: [primaryStreet] };
     await upsertDocument(COLLECTIONS.USERS, id, newStaff);
     await syncUserToSupabase(newStaff);
-    setActiveToast({ title: "Staff Partner Added", message: `${name} is now registered.` });
+    setActiveToast({ title: "Staff Partner Added", message: `${name} is now registered for ${primaryStreet}.` });
   }, [normalizeId]);
 
   const handleUpdateStaffRole = useCallback(async (mobile: string, isDelivery: boolean) => {
     const id = normalizeId(mobile);
     await updateDocument(COLLECTIONS.USERS, id, { isDeliveryBoy: isDelivery });
+    const updated = await getDocument(COLLECTIONS.USERS, id) as User;
+    await syncUserToSupabase(updated);
   }, [normalizeId]);
 
   const handleUpdateAdminRole = useCallback(async (mobile: string, isAdmin: boolean) => {
     const id = normalizeId(mobile);
     await updateDocument(COLLECTIONS.USERS, id, { isAdmin: isAdmin });
+    const updated = await getDocument(COLLECTIONS.USERS, id) as User;
+    await syncUserToSupabase(updated);
+  }, [normalizeId]);
+
+  const handleUpdateStaffAreas = useCallback(async (mobile: string, areas: string[]) => {
+    const id = normalizeId(mobile);
+    await updateDocument(COLLECTIONS.USERS, id, { preferredAreas: areas });
+    const updated = await getDocument(COLLECTIONS.USERS, id) as User;
+    await syncUserToSupabase(updated);
+    setActiveToast({ title: "Areas Updated", message: "Staff coverage zones saved." });
+  }, [normalizeId]);
+
+  const handleDeleteStaff = useCallback(async (mobile: string) => {
+    const id = normalizeId(mobile);
+    await deleteDocument(COLLECTIONS.USERS, id);
+    await deleteUserFromSupabase(id);
+    setActiveToast({ title: "Staff Removed", message: "Account deleted from system." });
   }, [normalizeId]);
 
   const userOrders = useMemo(() => allOrders.filter(o => normalizeId(o.userMobile) === normalizeId(user?.mobile || user?.email || '')), [allOrders, user, normalizeId]);
@@ -339,7 +360,7 @@ const App: React.FC = () => {
   const unreadCount = useMemo(() => relevantNotifications.filter(n => !n.isRead).length, [relevantNotifications]);
 
   if (appLoading) return <SplashScreen />;
-  if (!user) return <Login onLogin={handleLogin} registeredUsers={registeredUsers} />;
+  if (!user) return <Login onLogin={handleLogin} registeredUsers={registeredUsers} townZones={townZones} />;
 
   return (
     <div className="flex flex-col md:flex-row h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden text-left">
@@ -373,13 +394,12 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-y-auto scrollbar-hide">
           <div className="max-w-4xl mx-auto w-full px-4 md:px-8 pt-6 pb-12 safe-bottom">
             {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
-            {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} />}
+            {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} onViewChange={setCurrentView} />}
             {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} onSupportClick={() => setCurrentView('support')} onUpdateUser={handleUpdateUser} unreadNotifCount={unreadCount} />}
             {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} onCancelOrder={(id) => updateOrderStatus(id, 'Cancelled', 'Cancelled by User')} onHelpClick={() => setCurrentView('support')} />}
-            {currentView === 'assistant' && <Assistant onBack={() => setCurrentView('profile')} />}
-            {currentView === 'support' && <Support onBack={() => setCurrentView('profile')} onOpenAssistant={() => setCurrentView('assistant')} />}
+            {currentView === 'support' && <Support onBack={() => setCurrentView('profile')} />}
             {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile || '') === normalizeId(user.mobile || user.email || ''))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
-            {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} onUpdateDeliveryFee={updateDeliveryFee} onUpdateUpiId={updateUpiId} onAssignOrder={assignOrder} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} onAddStaff={handleAddStaff} onUpdateStaffRole={handleUpdateStaffRole} onUpdateAdminRole={handleUpdateAdminRole} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
+            {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} townZones={townZones} onUpdateDeliveryFee={updateDeliveryFee} onUpdateUpiId={updateUpiId} onUpdateTownZones={updateTownZones} onAssignOrder={assignOrder} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} onAddStaff={handleAddStaff} onUpdateStaffRole={handleUpdateStaffRole} onUpdateAdminRole={handleUpdateAdminRole} onUpdateStaffAreas={handleUpdateStaffAreas} onDeleteStaff={handleDeleteStaff} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
             {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
           </div>
         </main>

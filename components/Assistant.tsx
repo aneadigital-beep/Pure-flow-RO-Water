@@ -113,7 +113,7 @@ const Assistant: React.FC<AssistantProps> = ({ onBack }) => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about water safety..."
-            className="flex-1 bg-gray-50 dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200"
+            className="flex-1 bg-gray-50 dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
           <button 
             type="submit"

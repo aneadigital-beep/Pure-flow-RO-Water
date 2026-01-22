@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { CartItem, DeliverySlot } from '../types';
+import { CartItem, DeliverySlot, Order, View } from '../types';
 import { TOWN_NAME } from '../constants';
 
 interface CartProps {
@@ -8,22 +8,25 @@ interface CartProps {
   upiId: string;
   onUpdate: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
-  onPlaceOrder: (method: 'COD' | 'UPI/Online', slot: DeliverySlot) => void;
+  onPlaceOrder: (method: 'COD' | 'UPI/Online', slot: DeliverySlot) => Promise<Order | null>;
   deliveryFee: number;
+  onViewChange: (view: View) => void;
 }
 
-const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOrder, deliveryFee }) => {
+const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOrder, deliveryFee, onViewChange }) => {
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'UPI/Online'>('COD');
   const [selectedSlot, setSelectedSlot] = useState<DeliverySlot | null>(null);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0), [items]);
   
   const total = subtotal > 0 ? subtotal + deliveryFee : 0;
 
-  const upiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-    `upi://pay?pa=${upiId}&pn=${TOWN_NAME}&am=${total}&cu=INR&tn=PureFlow_Order`
-  )}`;
+  const upiQrUrl = useMemo(() => `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+    `upi://pay?pa=${upiId}&pn=${TOWN_NAME}&am=${placedOrder ? placedOrder.total : total}&cu=INR&tn=Order_${placedOrder ? placedOrder.id : 'PureFlow'}`
+  )}`, [upiId, total, placedOrder]);
 
   const slots: { id: DeliverySlot; icon: string; label: string; time: string }[] = [
     { id: 'Morning (8AM-11AM)', icon: 'fa-sun', label: 'Morning', time: '8AM-11AM' },
@@ -41,6 +44,79 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
     setIsUpdating(id);
     setTimeout(() => onRemove(id), 200);
   };
+
+  const handleFinalizeOrder = async () => {
+    if (!selectedSlot || isProcessing) return;
+    setIsProcessing(true);
+    const order = await onPlaceOrder(paymentMethod, selectedSlot);
+    if (order) {
+      setPlacedOrder(order);
+    }
+    setIsProcessing(false);
+  };
+
+  if (placedOrder) {
+    const isUPI = placedOrder.paymentMethod === 'UPI/Online';
+    return (
+      <div className="animate-in fade-in zoom-in-95 duration-500 py-10 px-4 text-center space-y-8 max-w-lg mx-auto">
+        <div className={`h-24 w-24 rounded-full mx-auto flex items-center justify-center shadow-lg ${isUPI ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
+          <i className={`fas ${isUPI ? 'fa-clock animate-pulse' : 'fa-check'} text-4xl`}></i>
+        </div>
+        
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+            {isUPI ? 'Payment Pending' : 'Order Confirmed!'}
+          </h2>
+          <p className="text-gray-500 dark:text-slate-400 text-sm">
+            {isUPI 
+              ? `Order #${placedOrder.id} has been recorded. Please complete the UPI payment to process your delivery.`
+              : `Order #${placedOrder.id} is successful! Our team in Punganur will deliver it during your selected slot.`}
+          </p>
+        </div>
+
+        {isUPI && (
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] border border-orange-100 dark:border-orange-900/30 shadow-xl space-y-6 text-left">
+            <h3 className="text-[10px] font-black text-orange-600 uppercase tracking-widest flex items-center gap-2">
+              <i className="fas fa-list-ol"></i> Final Payment Steps
+            </h3>
+            <div className="space-y-5">
+              <div className="flex gap-4">
+                <div className="h-6 w-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px] font-black shrink-0">1</div>
+                <p className="text-xs text-gray-700 dark:text-slate-300 font-medium leading-relaxed">Scan this official QR using PhonePe, Google Pay, or any UPI app.</p>
+              </div>
+              
+              <div className="flex flex-col items-center justify-center py-2 space-y-3">
+                <div className="bg-white p-3 rounded-2xl shadow-md border border-gray-100 inline-block">
+                  <img src={upiQrUrl} alt="QR Code" className="h-44 w-44" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-black text-orange-600">₹{placedOrder.total}</p>
+                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{upiId}</p>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="h-6 w-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px] font-black shrink-0">2</div>
+                <p className="text-xs text-gray-700 dark:text-slate-300 font-medium leading-relaxed">Confirm the payment of ₹{placedOrder.total} to <span className="font-bold">Punganur Aquaflow</span>.</p>
+              </div>
+              
+              <div className="flex gap-4">
+                <div className="h-6 w-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px] font-black shrink-0">3</div>
+                <p className="text-xs text-gray-700 dark:text-slate-300 font-medium leading-relaxed">Once the transaction is complete, click "Finish" to view your order status.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => onViewChange('orders')}
+          className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all"
+        >
+          {isUPI ? "Finish & Go to My Orders" : "View My Orders"}
+        </button>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -95,7 +171,7 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
                   >
                     <i className="fas fa-minus text-[10px]"></i>
                   </button>
-                  <span className={`font-bold text-sm w-4 text-center dark:text-slate-200 transition-all ${isUpdating === item.product.id ? 'scale-125 text-blue-600' : ''}`}>
+                  <span className={`font-bold text-sm w-4 text-center text-slate-900 dark:text-slate-200 transition-all ${isUpdating === item.product.id ? 'scale-125 text-blue-600' : ''}`}>
                     {item.quantity}
                   </span>
                   <button 
@@ -224,13 +300,17 @@ const Cart: React.FC<CartProps> = ({ items, upiId, onUpdate, onRemove, onPlaceOr
         </div>
         
         <button
-          onClick={() => selectedSlot && onPlaceOrder(paymentMethod, selectedSlot)}
-          disabled={!selectedSlot}
+          onClick={handleFinalizeOrder}
+          disabled={!selectedSlot || isProcessing}
           className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-200 dark:shadow-none transition-all active:scale-[0.97] flex items-center justify-center gap-3 relative z-10 overflow-hidden disabled:opacity-50 disabled:grayscale"
         >
           <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity"></div>
-          <i className={paymentMethod === 'COD' ? "fas fa-check-circle" : "fas fa-shield-check"}></i>
-          {!selectedSlot ? 'Select Delivery Slot' : paymentMethod === 'COD' ? 'Confirm Order' : 'Pay & Order'}
+          {isProcessing ? (
+            <i className="fas fa-circle-notch animate-spin"></i>
+          ) : (
+            <i className={paymentMethod === 'COD' ? "fas fa-check-circle" : "fas fa-shield-check"}></i>
+          )}
+          {isProcessing ? 'Placing Order...' : !selectedSlot ? 'Select Delivery Slot' : paymentMethod === 'COD' ? 'Confirm Order' : 'Pay & Order'}
         </button>
       </div>
     </div>

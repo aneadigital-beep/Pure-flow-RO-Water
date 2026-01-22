@@ -43,7 +43,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange, cartCount })
               {tab.label}
             </span>
             
-            {/* Minimalist Active Indicators (No background color on sidebar) */}
+            {/* Minimalist Active Indicators */}
             {currentView === tab.id && (
               <>
                 {/* Desktop Side Bar indicator rail */}
@@ -56,19 +56,8 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange, cartCount })
         ))}
       </div>
 
-      <div className="md:mt-auto flex md:flex-col items-center gap-4 px-4 md:px-0 md:pb-4">
-        <div className="hidden md:block h-px w-8 bg-slate-100 dark:bg-slate-800"></div>
-        <button 
-           onClick={() => onViewChange('assistant')}
-           className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-all shadow-md ${
-             currentView === 'assistant' 
-               ? 'bg-blue-600 text-white scale-110 shadow-blue-200 dark:shadow-none' 
-               : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400'
-           }`}
-           aria-label="AI Assistant"
-        >
-          <i className="fas fa-wand-magic-sparkles text-lg"></i>
-        </button>
+      <div className="md:mt-auto hidden md:flex md:flex-col items-center gap-4 px-4 md:px-0 md:pb-4">
+        <div className="h-px w-8 bg-slate-100 dark:bg-slate-800"></div>
       </div>
     </nav>
   );

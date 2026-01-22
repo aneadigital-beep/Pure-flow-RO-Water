@@ -4,28 +4,27 @@ import { BUSINESS_PHONE, TOWN_NAME } from '../constants';
 
 interface SupportProps {
   onBack: () => void;
-  onOpenAssistant: () => void;
 }
 
-const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
+const Support: React.FC<SupportProps> = ({ onBack }) => {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
   const faqs = [
     {
-      q: "Order not received, what happened?",
-      a: "Most deliveries occur within your selected window (Morning/Afternoon/Evening). If your window has passed and your status is still 'Processing', it might be due to high demand. Please use the WhatsApp button below for a direct update."
+      q: "When will my water be delivered?",
+      a: "Punganur Aquaflow operates in three windows: Morning (8-11 AM), Afternoon (12-3 PM), and Evening (4-7 PM). If you order before 10 AM, you'll receive your water the same day!"
     },
     {
-      q: "When will my water be delivered?",
-      a: "Orders placed before 10 AM are delivered on the same day. Orders after 10 AM are delivered within 24 hours."
+      q: "Why is my order still 'Processing'?",
+      a: "This means our Punganur plant has verified your order and is currently loading it onto a delivery van. You will receive an alert once it's 'Out for Delivery' in your street."
     },
     {
       q: "How do I pay for my subscription?",
-      a: "You can pay via UPI directly in the app or choose Cash on Delivery. Subscriptions are billed monthly."
+      a: "You can pay via UPI directly within the App or pay Cash to the delivery partner when they arrive at your home."
     },
     {
-      q: "Is the water quality tested?",
-      a: "Yes! PureFlow water undergoes a 7-stage RO purification process and is tested daily for TDS and pH levels."
+      q: "Is the water truly RO purified?",
+      a: "Yes! We use a 7-stage RO filtration system located right here in Punganur. We test TDS levels daily to ensure you get the purest water."
     }
   ];
 
@@ -34,7 +33,7 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
   };
 
   const handleWhatsApp = (context?: string) => {
-    const text = context ? `I have an issue with order ${context}` : `Hi ${TOWN_NAME} Support, I need help with my water delivery.`;
+    const text = context ? `Issue with Punganur Aquaflow Order: ${context}` : `Hi Punganur Aquaflow Team, I need assistance with a water delivery.`;
     const message = encodeURIComponent(text);
     window.open(`https://wa.me/${BUSINESS_PHONE}?text=${message}`, '_blank');
   };
@@ -45,14 +44,14 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
         <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-90 transition-transform">
           <i className="fas fa-arrow-left"></i>
         </button>
-        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Help & Support</h2>
+        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Help Center</h2>
       </div>
 
-      <div className="bg-blue-600 dark:bg-blue-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+      <div className="bg-blue-600 dark:bg-blue-700 rounded-3xl p-7 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
         <div className="relative z-10">
-          <h3 className="text-lg font-black mb-1">Need Immediate Help?</h3>
-          <p className="text-blue-100 text-xs mb-6 opacity-90">Our team is available from 8 AM to 8 PM daily.</p>
+          <h3 className="text-xl font-black mb-1">Contact Team</h3>
+          <p className="text-blue-100 text-[10px] mb-6 opacity-80 uppercase tracking-widest font-bold">Live Support: 8 AM - 8 PM</p>
           
           <div className="grid grid-cols-2 gap-3">
             <button 
@@ -67,53 +66,17 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
               className="bg-blue-500 text-white py-4 rounded-2xl flex flex-col items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg border border-blue-400 active:scale-95 transition-all"
             >
               <i className="fas fa-phone-volume text-xl"></i>
-              Call Center
+              Call Now
             </button>
           </div>
         </div>
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Order Issue?</h3>
-        <button 
-          onClick={() => handleWhatsApp("Not Received")}
-          className="w-full p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-2xl flex items-center gap-4 group"
-        >
-          <div className="h-10 w-10 rounded-xl bg-red-100 dark:bg-red-900/50 flex items-center justify-center text-red-600 dark:text-red-400">
-            <i className="fas fa-circle-exclamation"></i>
-          </div>
-          <div className="text-left flex-1">
-             <p className="text-sm font-bold text-red-800 dark:text-red-200">Report Missing Item</p>
-             <p className="text-[10px] text-red-600 dark:text-red-400/60 font-medium">Alert dispatch team about your order</p>
-          </div>
-          <i className="fas fa-chevron-right text-red-300 group-hover:translate-x-1 transition-transform"></i>
-        </button>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest ml-1">AI Assistant</h3>
-        <button 
-          onClick={onOpenAssistant}
-          className="w-full p-5 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 flex items-center justify-between shadow-sm group hover:border-blue-500 transition-all"
-        >
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400">
-              <i className="fas fa-wand-magic-sparkles text-xl"></i>
-            </div>
-            <div className="text-left">
-              <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Chat with PureFlow AI</p>
-              <p className="text-[10px] text-slate-400">Instant answers about water safety & plans</p>
-            </div>
-          </div>
-          <i className="fas fa-chevron-right text-slate-300 group-hover:translate-x-1 transition-transform"></i>
-        </button>
-      </div>
-
       <div className="space-y-3">
-        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Common Questions</h3>
+        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Frequency Asked</h3>
         <div className="space-y-2">
           {faqs.map((faq, idx) => (
-            <div key={idx} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden transition-all">
+            <div key={idx} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden transition-all shadow-sm">
               <button 
                 onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}
                 className="w-full p-4 flex items-center justify-between text-left"
@@ -131,10 +94,10 @@ const Support: React.FC<SupportProps> = ({ onBack, onOpenAssistant }) => {
         </div>
       </div>
 
-      <div className="bg-slate-100 dark:bg-slate-900/50 p-6 rounded-3xl text-center space-y-2 border border-slate-200/50 dark:border-slate-800">
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Our Office</p>
-        <p className="text-xs font-bold text-slate-600 dark:text-slate-300">PureFlow Water Plant, Phase 2 Industrial Area</p>
-        <p className="text-[10px] text-slate-400">{TOWN_NAME} Township</p>
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-3xl text-center space-y-1.5 border border-slate-200/50 dark:border-slate-800 shadow-inner">
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Main Plant Address</p>
+        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Punganur RO-Tech Industrial Park, Sector 4</p>
+        <p className="text-[10px] text-slate-400 font-medium">Punganur, Andhra Pradesh - 517247</p>
       </div>
     </div>
   );

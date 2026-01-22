@@ -18,13 +18,13 @@ const SplashScreen: React.FC = () => {
         </div>
 
         {/* Brand Name */}
-        <h1 className="text-5xl font-black tracking-tighter mb-2 drop-shadow-lg">
-          Pure<span className="text-blue-200">Flow</span>
+        <h1 className="text-4xl font-black tracking-tighter mb-2 drop-shadow-lg text-center uppercase">
+          Punganur <span className="text-blue-200">Aquaflow</span>
         </h1>
         
         {/* Tagline */}
-        <p className="text-blue-100 font-medium tracking-wide italic opacity-90 animate-in slide-in-from-bottom-4 duration-1000 delay-300">
-          "Bringing water to your doorstep"
+        <p className="text-blue-100 font-medium tracking-wide italic opacity-90 animate-in slide-in-from-bottom-4 duration-1000 delay-300 text-center">
+          "Bringing pure water to your doorstep in Punganur"
         </p>
 
         {/* Loading Indicator */}

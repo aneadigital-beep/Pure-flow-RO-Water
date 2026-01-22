@@ -136,7 +136,7 @@ const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({ orders, onUpdateS
                     value={orderNotes[order.id] || ''}
                     onChange={(e) => setOrderNotes(prev => ({ ...prev, [order.id]: e.target.value }))}
                     placeholder="Add comments..."
-                    className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-xl px-4 py-3 text-xs h-16 focus:outline-none focus:ring-2 focus:ring-green-500 dark:text-slate-200 transition-all resize-none"
+                    className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-xl px-4 py-3 text-xs h-16 focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-900 dark:text-slate-200 transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   />
                 </div>
 

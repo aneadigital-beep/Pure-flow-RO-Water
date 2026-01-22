@@ -21,10 +21,12 @@ export interface User {
   name: string;
   address: string;
   pincode: string;
+  selectedZone: string; // Mandatory delivery zone
   avatar?: string;
   isLoggedIn: boolean;
   isAdmin?: boolean;
   isDeliveryBoy?: boolean;
+  preferredAreas?: string[]; // Array of zone/street names for staff
 }
 
 export interface StatusHistory {
@@ -65,4 +67,4 @@ export interface AppNotification {
   userMobile?: string;
 }
 
-export type View = 'home' | 'cart' | 'profile' | 'orders' | 'admin' | 'delivery' | 'notifications' | 'assistant' | 'support';
+export type View = 'home' | 'cart' | 'profile' | 'orders' | 'admin' | 'delivery' | 'notifications' | 'support';

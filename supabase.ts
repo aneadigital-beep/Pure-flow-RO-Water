@@ -39,6 +39,15 @@ export const syncUserToSupabase = async (user: any) => {
   }
 };
 
+export const deleteUserFromSupabase = async (id: string) => {
+  try {
+    const { error } = await supabase.from('users').delete().eq('id', id);
+    return !error;
+  } catch (err) {
+    return false;
+  }
+};
+
 export const syncProductToSupabase = async (product: any) => {
   try {
     const { lastUpdated, ...dataToSync } = product;
