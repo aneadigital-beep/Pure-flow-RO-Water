@@ -78,11 +78,18 @@ const Admin: React.FC<AdminProps> = ({
   const [staffForm, setStaffForm] = useState({ name: '', mobile: '', primaryStreet: '' });
   const [isProcessingImg, setIsProcessingImg] = useState(false);
   
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedOrder = useMemo(() => orders.find(o => o.id === selectedOrderId), [orders, selectedOrderId]);
+
+  // Synchronize modal state when an order is selected
+  useEffect(() => {
+    if (selectedOrder) {
+      setTempStatus(selectedOrder.status);
+      setTempStaff(selectedOrder.assignedToMobile || undefined);
+      setAdminNote('');
+    }
+  }, [selectedOrder]);
 
   const stats = useMemo(() => {
     const delivered = orders.filter(o => o.status === 'Delivered');
@@ -171,7 +178,6 @@ const Admin: React.FC<AdminProps> = ({
     exportToCSV(exportData, 'Punganur_Aquaflow_Inventory');
   };
 
-  // High precision street detection logic
   const getOrderZone = (address: string) => {
     const addrLower = address.toLowerCase();
     for (const zone of townZones) {
@@ -184,7 +190,7 @@ const Admin: React.FC<AdminProps> = ({
 
   const filteredStaff = useMemo(() => {
     return registeredUsers
-      .filter(u => u.isAdmin || u.isDeliveryBoy) // Only show staff members, not regular customers
+      .filter(u => u.isAdmin || u.isDeliveryBoy)
       .filter(u => 
         u.name.toLowerCase().includes(staffSearch.toLowerCase()) || 
         (u.mobile && u.mobile.includes(staffSearch)) ||
@@ -216,7 +222,7 @@ const Admin: React.FC<AdminProps> = ({
         const matchedStaff = deliveryBoys.find(b => b.preferredAreas?.includes(orderZone));
         
         if (matchedStaff) {
-          await onAssignOrder(order.id, matchedStaff.mobile);
+          await onAssignOrder(order.id, matchedStaff.mobile || (matchedStaff as any).id);
           await onUpdateStatus(order.id, 'Processing', `Smart-assigned via Street: ${orderZone}`);
           matchCount++;
           continue;
@@ -225,11 +231,11 @@ const Admin: React.FC<AdminProps> = ({
 
       const staffWorkload = deliveryBoys.map(boy => ({
         boy,
-        count: orders.filter(o => o.assignedToMobile === boy.mobile && o.status !== 'Delivered' && o.status !== 'Cancelled').length
+        count: orders.filter(o => o.assignedToMobile === (boy.mobile || (boy as any).id) && o.status !== 'Delivered' && o.status !== 'Cancelled').length
       })).sort((a, b) => a.count - b.count);
       
       const assignedStaff = staffWorkload[0].boy;
-      await onAssignOrder(order.id, assignedStaff.mobile);
+      await onAssignOrder(order.id, assignedStaff.mobile || (assignedStaff as any).id);
       await onUpdateStatus(order.id, 'Processing', `Assigned via Load Balancing`);
     }
 
@@ -251,14 +257,12 @@ const Admin: React.FC<AdminProps> = ({
       );
     }
 
-    // Sorting: prioritize unassigned orders at the top
     result.sort((a, b) => {
       const aAssigned = !!a.assignedToMobile;
       const bAssigned = !!b.assignedToMobile;
       if (aAssigned !== bAssigned) {
         return aAssigned ? 1 : -1;
       }
-      // If both are same status, sort by newest first
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
@@ -280,7 +284,7 @@ const Admin: React.FC<AdminProps> = ({
   };
 
   const toggleStaffArea = (mobile: string, area: string) => {
-    const staff = registeredUsers.find(u => u.mobile === mobile);
+    const staff = registeredUsers.find(u => (u.mobile || (u as any).id) === mobile);
     if (!staff) return;
     const currentAreas = staff.preferredAreas || [];
     const newAreas = currentAreas.includes(area)
@@ -395,7 +399,7 @@ const Admin: React.FC<AdminProps> = ({
                    <select value={tempStaff || ''} onChange={e => setTempStaff(e.target.value || undefined)} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 px-4 text-sm font-bold text-slate-800 dark:text-slate-200 focus:border-blue-500 outline-none shadow-sm">
                       <option value="">-- No One Assigned --</option>
                       {deliveryBoys.map(boy => (
-                        <option key={boy.mobile} value={boy.mobile}>{boy.name} {boy.preferredAreas?.length ? `(${boy.preferredAreas[0]})` : ''}</option>
+                        <option key={boy.mobile || (boy as any).id} value={boy.mobile || (boy as any).id}>{boy.name} {boy.preferredAreas?.length ? `(${boy.preferredAreas[0]})` : ''}</option>
                       ))}
                    </select>
                 </div>
@@ -620,7 +624,7 @@ const Admin: React.FC<AdminProps> = ({
               <input type="text" placeholder="Search team members..." value={staffSearch} onChange={e => setStaffSearch(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
               <div className="space-y-3">
                 {filteredStaff.map(s => (
-                  <div key={s.mobile || s.email} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4 relative overflow-hidden">
+                  <div key={s.mobile || (s as any).id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4 relative overflow-hidden">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center font-black text-blue-600 dark:text-blue-400">{s.name.charAt(0)}</div>
                       <div className="flex-1">
@@ -628,15 +632,15 @@ const Admin: React.FC<AdminProps> = ({
                         <p className="text-[10px] text-slate-400 font-bold">{s.mobile || s.email}</p>
                       </div>
                       <div className="flex gap-1 items-center">
-                         <button onClick={() => onUpdateStaffRole(s.mobile || '', !s.isDeliveryBoy)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isDeliveryBoy ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Delivery Boy"><i className="fas fa-truck"></i></button>
-                         <button onClick={() => onUpdateAdminRole(s.mobile || '', !s.isAdmin)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isAdmin ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Admin"><i className="fas fa-crown"></i></button>
-                         {staffDeleteConfirmId === s.mobile ? (
+                         <button onClick={() => onUpdateStaffRole(s.mobile || (s as any).id || '', !s.isDeliveryBoy)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isDeliveryBoy ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Delivery Boy"><i className="fas fa-truck"></i></button>
+                         <button onClick={() => onUpdateAdminRole(s.mobile || (s as any).id || '', !s.isAdmin)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isAdmin ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Admin"><i className="fas fa-crown"></i></button>
+                         {staffDeleteConfirmId === (s.mobile || (s as any).id) ? (
                            <div className="flex items-center gap-1 animate-in slide-in-from-right-2">
-                             <button onClick={() => handleConfirmStaffDelete(s.mobile || '')} className="p-2 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase">Yes</button>
+                             <button onClick={() => handleConfirmStaffDelete(s.mobile || (s as any).id || '')} className="p-2 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase">Yes</button>
                              <button onClick={() => setStaffDeleteConfirmId(null)} className="p-2 bg-slate-200 text-slate-600 rounded-lg text-[8px] font-black uppercase">No</button>
                            </div>
                          ) : (
-                           <button onClick={() => setStaffDeleteConfirmId(s.mobile || null)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
+                           <button onClick={() => setStaffDeleteConfirmId(s.mobile || (s as any).id || null)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
                          )}
                       </div>
                     </div>
@@ -651,7 +655,7 @@ const Admin: React.FC<AdminProps> = ({
                           {townZones.map(zone => (
                             <button 
                                 key={zone}
-                                onClick={() => toggleStaffArea(s.mobile || '', zone)}
+                                onClick={() => toggleStaffArea(s.mobile || (s as any).id || '', zone)}
                                 className={`px-2 py-1 rounded-md text-[9px] font-bold transition-all border ${s.preferredAreas?.includes(zone) ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-700 text-slate-400'}`}
                             >
                                 {zone}
