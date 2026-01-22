@@ -28,7 +28,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
   
   const [existingUser, setExistingUser] = useState<User | null>(null);
 
-  const ADMIN_ID = '9999999999';
+  const ADMIN_ID = '9620674013';
 
   useEffect(() => {
     if (pinError) setPinError(false);

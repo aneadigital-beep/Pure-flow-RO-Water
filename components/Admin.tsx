@@ -183,11 +183,13 @@ const Admin: React.FC<AdminProps> = ({
   const deliveryBoys = useMemo(() => registeredUsers.filter(u => u.isDeliveryBoy), [registeredUsers]);
 
   const filteredStaff = useMemo(() => {
-    return registeredUsers.filter(u => 
-      u.name.toLowerCase().includes(staffSearch.toLowerCase()) || 
-      (u.mobile && u.mobile.includes(staffSearch)) ||
-      (u.email && u.email.toLowerCase().includes(staffSearch.toLowerCase()))
-    );
+    return registeredUsers
+      .filter(u => u.isAdmin || u.isDeliveryBoy) // Only show staff members, not regular customers
+      .filter(u => 
+        u.name.toLowerCase().includes(staffSearch.toLowerCase()) || 
+        (u.mobile && u.mobile.includes(staffSearch)) ||
+        (u.email && u.email.toLowerCase().includes(staffSearch.toLowerCase()))
+      );
   }, [registeredUsers, staffSearch]);
 
   const handleSmartAssign = async () => {
@@ -248,6 +250,18 @@ const Admin: React.FC<AdminProps> = ({
         o.id.toLowerCase().includes(search)
       );
     }
+
+    // Sorting: prioritize unassigned orders at the top
+    result.sort((a, b) => {
+      const aAssigned = !!a.assignedToMobile;
+      const bAssigned = !!b.assignedToMobile;
+      if (aAssigned !== bAssigned) {
+        return aAssigned ? 1 : -1;
+      }
+      // If both are same status, sort by newest first
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
     return result;
   }, [orders, orderSearch, filterUnassigned]);
 

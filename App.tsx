@@ -196,10 +196,10 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string }) => {
-    const ADMIN_ID = '9999999999';
+    const ADMIN_IDS = ['9999999999', '9620674013'];
     const id = normalizeId(creds.mobile || creds.email);
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
-    const isAdmin = id === ADMIN_ID || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin; 
+    const isAdmin = ADMIN_IDS.includes(id) || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin; 
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy;
 
     const newUser: User = { 
