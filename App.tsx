@@ -115,29 +115,16 @@ const App: React.FC = () => {
 
         if (cloudOrders) {
           setIsCloudSynced(true);
-          // Batch local update
-          const existing = [...allOrders];
-          cloudOrders.forEach(o => {
-            const idx = existing.findIndex(e => e.id === o.id);
-            if (idx === -1) existing.push(o);
-            else existing[idx] = o;
-            upsertDocument(COLLECTIONS.ORDERS, o.id, o);
-          });
-          setAllOrders(existing.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+          setAllOrders(cloudOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+          cloudOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
         }
 
         if (cloudUsers) {
-          const existing = [...registeredUsers];
+          setRegisteredUsers(cloudUsers);
           cloudUsers.forEach(u => {
             const id = normalizeId(u.mobile || u.email);
-            if (id) {
-              const idx = existing.findIndex(e => normalizeId(e.mobile || e.email) === id);
-              if (idx === -1) existing.push(u);
-              else existing[idx] = u;
-              upsertDocument(COLLECTIONS.USERS, id, u);
-            }
+            if (id) upsertDocument(COLLECTIONS.USERS, id, u);
           });
-          setRegisteredUsers(existing);
         }
 
         if (cloudProducts && cloudProducts.length > 0) {
@@ -190,38 +177,38 @@ const App: React.FC = () => {
     // Subscribing to REALTIME changes for Admin/Staff visibility
     const orderChannel = subscribeToTable('orders', (payload) => {
       if (payload.new) {
-        // Sync local storage
-        upsertDocument(COLLECTIONS.ORDERS, payload.new.id, payload.new);
+        const newOrder = payload.new as Order;
+        upsertDocument(COLLECTIONS.ORDERS, newOrder.id, newOrder);
         
-        // Update state immediately if it's a new order or a status change
         setAllOrders(prev => {
-          const idx = prev.findIndex(o => o.id === payload.new.id);
+          const idx = prev.findIndex(o => o.id === newOrder.id);
           let next;
           if (idx === -1) {
-            next = [payload.new as Order, ...prev];
-            addNotification('New Order', `Received a new order #${payload.new.id}`, 'order', true);
+            next = [newOrder, ...prev];
+            addNotification('New Order', `Received a new order from ${newOrder.userName}`, 'order', true);
           } else {
             next = [...prev];
-            next[idx] = payload.new as Order;
+            next[idx] = newOrder;
           }
           return next.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         });
 
         if (payload.eventType === 'UPDATE' && payload.new.status !== payload.old?.status) {
-           addNotification('Order Updated', `Order #${payload.new.id} is now ${payload.new.status}`, 'system', false, payload.new.userMobile);
+           addNotification('Order Updated', `Order #${newOrder.id} is now ${newOrder.status}`, 'system', false, newOrder.userMobile);
         }
       }
     });
 
     const userChannel = subscribeToTable('users', (payload) => {
       if (payload.new) {
-        const id = normalizeId(payload.new.mobile || payload.new.email);
-        upsertDocument(COLLECTIONS.USERS, id, payload.new);
+        const newUser = payload.new as User;
+        const id = normalizeId(newUser.mobile || newUser.email);
+        upsertDocument(COLLECTIONS.USERS, id, newUser);
         setRegisteredUsers(prev => {
            const idx = prev.findIndex(u => normalizeId(u.mobile || u.email) === id);
-           if (idx === -1) return [payload.new as User, ...prev];
+           if (idx === -1) return [newUser, ...prev];
            const next = [...prev];
-           next[idx] = payload.new as User;
+           next[idx] = newUser;
            return next;
         });
       }
@@ -252,6 +239,8 @@ const App: React.FC = () => {
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string }) => {
     const ADMIN_IDS = ['9999999999', '9620674013'];
     const id = normalizeId(creds.mobile || creds.email);
+    
+    // Check locally first, then cloud if needed
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
     
     const isAdmin = ADMIN_IDS.includes(id) || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin; 
@@ -273,7 +262,8 @@ const App: React.FC = () => {
     };
     
     setUser(newUser);
-    // Update local state and storage
+    
+    // Sequential update: Storage -> Local State -> Cloud
     await upsertDocument(COLLECTIONS.USERS, id, newUser);
     setRegisteredUsers(prev => {
       const idx = prev.findIndex(u => normalizeId(u.mobile || u.email) === id);
@@ -283,7 +273,8 @@ const App: React.FC = () => {
       return next;
     });
 
-    await syncUserToSupabase(newUser);
+    const syncSuccess = await syncUserToSupabase(newUser);
+    setIsCloudSynced(syncSuccess);
     
     if (isAdmin) setCurrentView('admin');
     else if (isDeliveryBoy) setCurrentView('delivery');
@@ -298,6 +289,7 @@ const App: React.FC = () => {
 
   const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online', deliverySlot: DeliverySlot): Promise<Order | null> => {
     if (!user || cart.length === 0) return null;
+    
     const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
     const productSummary = cart.map(item => `${item.quantity}x ${item.product.name}`).join(', ');
     const now = new Date();
@@ -306,18 +298,24 @@ const App: React.FC = () => {
     const newOrder: Order = {
       id: orderId,
       userMobile: normalizeId(user.mobile || user.email),
-      userName: user.name, userAddress: user.address, userZipcode: user.pincode,
-      productSummary, date: now.toLocaleDateString(), createdAt: now.toISOString(),
-      total: subtotal + deliveryFee, items: [...cart], status: 'Pending', paymentMethod,
+      userName: user.name, 
+      userAddress: user.address, 
+      userZipcode: user.pincode,
+      productSummary, 
+      date: now.toLocaleDateString(), 
+      createdAt: now.toISOString(),
+      total: subtotal + deliveryFee, 
+      items: [...cart], 
+      status: 'Pending', 
+      paymentMethod,
       deliverySlot,
       history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, note: 'Order placed' }]
     };
 
-    // Save locally first
+    // Sequential persistence: Storage -> Local State -> Cloud Broadcast
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
     setAllOrders(prev => [newOrder, ...prev].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     
-    // Cloud sync
     const success = await syncOrderToSupabase(newOrder);
     setIsCloudSynced(success);
 
@@ -336,7 +334,6 @@ const App: React.FC = () => {
       history: [...orderToUpdate.history, { status, timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, note: note || `Status updated to ${status}` }]
     };
 
-    // Update state immediately
     setAllOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
     await upsertDocument(COLLECTIONS.ORDERS, orderId, updatedOrder);
     await syncOrderToSupabase(updatedOrder);
