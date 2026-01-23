@@ -295,6 +295,7 @@ const App: React.FC = () => {
     setUser(updatedUser);
     await upsertDocument(COLLECTIONS.USERS, id, updatedUser);
     await syncUserToSupabase(updatedUser);
+    setActiveToast({ title: "Profile Updated", message: "Your details have been saved successfully." });
   };
 
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string }) => {
@@ -499,7 +500,7 @@ const App: React.FC = () => {
           <div className="max-w-4xl mx-auto w-full px-4 md:px-8 pt-6 pb-12 safe-bottom">
             {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
             {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} onViewChange={setCurrentView} />}
-            {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} onSupportClick={() => setCurrentView('support')} onUpdateUser={handleUpdateUser} unreadNotifCount={relevantNotifications.filter(n => !n.isRead).length} />}
+            {currentView === 'profile' && <Profile user={user} townZones={townZones} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} onSupportClick={() => setCurrentView('support')} onUpdateUser={handleUpdateUser} unreadNotifCount={relevantNotifications.filter(n => !n.isRead).length} />}
             {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} onCancelOrder={(id) => updateOrderStatus(id, 'Cancelled', 'Cancelled by User')} onHelpClick={() => setCurrentView('support')} />}
             {currentView === 'support' && <Support onBack={() => setCurrentView('profile')} />}
             {currentView === 'delivery' && <DeliveryDashboard orders={staffTasks} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} onRefresh={refreshCloudData} />}
