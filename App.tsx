@@ -62,7 +62,12 @@ const App: React.FC = () => {
   const [appLoading, setAppLoading] = useState(true);
   const [isCloudSynced, setIsCloudSynced] = useState(false);
 
-  const normalizeId = useCallback((id: string | undefined | null) => (id || '').replace(/\D/g, '').trim(), []);
+  // Aggressive normalization: use only last 10 digits for mobile numbers
+  const normalizeId = useCallback((id: string | undefined | null) => {
+    if (!id) return '';
+    const digits = id.toString().replace(/\D/g, '').trim();
+    return digits.length >= 10 ? digits.slice(-10) : digits;
+  }, []);
 
   useEffect(() => {
     try {
@@ -84,22 +89,42 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   const addNotification = useCallback((title: string, message: string, type: AppNotification['type'], forAdmin: boolean, userMobile?: string) => {
+    const normTarget = normalizeId(userMobile);
     const newNotif: AppNotification = {
       id: `notif-${Date.now()}`,
       title, message,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       type, isRead: false, forAdmin,
-      userMobile: userMobile ? normalizeId(userMobile) : undefined
+      userMobile: normTarget
     };
     setNotifications(prev => [newNotif, ...prev]);
     
-    const isRelevantUser = !forAdmin && user && normalizeId(user.mobile || user.email) === normalizeId(userMobile);
+    const myId = normalizeId(user?.mobile || (user as any)?.id);
+    const isRelevantUser = !forAdmin && user && (myId === normTarget);
     const isRelevantAdmin = forAdmin && user?.isAdmin;
     
     if (isRelevantUser || isRelevantAdmin) {
       setActiveToast({ title, message });
     }
   }, [user, normalizeId]);
+
+  const refreshCloudData = useCallback(async () => {
+    try {
+      const cloudOrders = await fetchOrdersFromSupabase();
+      if (cloudOrders) {
+        setIsCloudSynced(true);
+        const mappedOrders = cloudOrders.map((o: any) => ({
+          ...o,
+          assignedToMobile: normalizeId(o.assignedToMobile || o.assignedtomobile),
+          assignedToName: o.assignedToName || o.assignedtoname || null
+        }));
+        setAllOrders(mappedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        mappedOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
+      }
+    } catch (e) {
+      console.error("Manual refresh failed:", e);
+    }
+  }, [normalizeId]);
 
   useEffect(() => {
     const splashTimer = setTimeout(() => setAppLoading(false), 2500);
@@ -115,15 +140,18 @@ const App: React.FC = () => {
 
         if (cloudOrders) {
           setIsCloudSynced(true);
-          const sorted = cloudOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setAllOrders(sorted);
-          sorted.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
+          const mappedOrders = cloudOrders.map((o: any) => ({
+            ...o,
+            assignedToMobile: normalizeId(o.assignedToMobile || o.assignedtomobile),
+            assignedToName: o.assignedToName || o.assignedtoname || null
+          }));
+          setAllOrders(mappedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+          mappedOrders.forEach(o => upsertDocument(COLLECTIONS.ORDERS, o.id, o));
         }
 
         if (cloudUsers) {
           setRegisteredUsers(cloudUsers);
           cloudUsers.forEach((u: any) => {
-            // Fix: Cast u to any to access Supabase 'id' property not defined in User type
             const id = normalizeId(u.mobile || u.email || u.id);
             if (id) upsertDocument(COLLECTIONS.USERS, id, u);
           });
@@ -176,36 +204,33 @@ const App: React.FC = () => {
       if (zonesSetting) setTownZones(zonesSetting.value);
     });
 
-    // Real-time Order Watcher
     const orderChannel = subscribeToTable('orders', (payload) => {
       if (payload.new) {
-        const newOrder = payload.new as Order;
-        upsertDocument(COLLECTIONS.ORDERS, newOrder.id, newOrder);
+        const raw = payload.new;
+        const newOrder: Order = {
+          ...raw,
+          assignedToMobile: normalizeId(raw.assignedToMobile || raw.assignedtomobile),
+          assignedToName: raw.assignedToName || raw.assignedtoname || null
+        };
         
+        upsertDocument(COLLECTIONS.ORDERS, newOrder.id, newOrder);
         setAllOrders(prev => {
           const idx = prev.findIndex(o => o.id === newOrder.id);
           let next;
           if (idx === -1) {
             next = [newOrder, ...prev];
-            addNotification('New Order', `Received a new order from ${newOrder.userName}`, 'order', true);
           } else {
             next = [...prev];
-            next[idx] = newOrder;
+            next[idx] = { ...next[idx], ...newOrder };
           }
           return next.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         });
-
-        if (payload.eventType === 'UPDATE' && payload.new.status !== payload.old?.status) {
-           addNotification('Order Updated', `Order #${newOrder.id} is now ${newOrder.status}`, 'system', false, newOrder.userMobile);
-        }
       }
     });
 
-    // Real-time User Watcher
     const userChannel = subscribeToTable('users', (payload) => {
       if (payload.new) {
         const newUser = payload.new as User;
-        // Fix: Cast newUser to any to access the Supabase 'id' property not in User type
         const id = normalizeId(newUser.mobile || newUser.email || (newUser as any).id);
         upsertDocument(COLLECTIONS.USERS, id, newUser);
         setRegisteredUsers(prev => {
@@ -218,73 +243,87 @@ const App: React.FC = () => {
       }
     });
 
-    const updateOnlineStatus = () => setIsCloudSynced(navigator.onLine);
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-
     return () => {
-      clearTimeout(splashTimer);
       unsubOrders(); unsubUsers(); unsubProducts(); unsubSettings();
       supabase.removeChannel(orderChannel);
       supabase.removeChannel(userChannel);
-      window.removeEventListener('online', updateOnlineStatus);
-      window.removeEventListener('offline', updateOnlineStatus);
     };
-  }, [normalizeId, addNotification]);
+  }, [normalizeId]);
+
+  const updateOrderStatus = useCallback(async (orderId: string, status: Order['status'], note?: string) => {
+    const now = new Date();
+    setAllOrders(prev => {
+      const orderToUpdate = prev.find(o => o.id === orderId);
+      if (!orderToUpdate) return prev;
+      const updatedOrder = {
+        ...orderToUpdate, 
+        status,
+        history: [...orderToUpdate.history, { 
+          status, 
+          timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 
+          note: note || `Status updated to ${status}` 
+        }]
+      };
+      upsertDocument(COLLECTIONS.ORDERS, orderId, updatedOrder);
+      syncOrderToSupabase(updatedOrder);
+      return prev.map(o => o.id === orderId ? updatedOrder : o);
+    });
+  }, []);
+
+  const assignOrder = useCallback(async (orderId: string, staffMobile: string | undefined) => {
+    const normalizedStaffId = normalizeId(staffMobile);
+    setAllOrders(prev => {
+      const orderToUpdate = prev.find(o => o.id === orderId);
+      if (!orderToUpdate) return prev;
+      const staff = registeredUsers.find(u => normalizeId(u.mobile || (u as any).id) === normalizedStaffId);
+      const assignmentData: Order = { 
+        ...orderToUpdate, 
+        assignedToMobile: normalizedStaffId || null, 
+        assignedToName: staff?.name || (staffMobile ? 'Staff Partner' : null)
+      };
+      upsertDocument(COLLECTIONS.ORDERS, orderId, assignmentData);
+      syncOrderToSupabase(assignmentData);
+      if (staffMobile) {
+        addNotification('New Task Assigned', `Order #${orderId} has been assigned to you.`, 'delivery', false, staffMobile);
+      }
+      return prev.map(o => o.id === orderId ? assignmentData : o);
+    });
+  }, [registeredUsers, addNotification, normalizeId]);
 
   const handleUpdateUser = async (updatedUser: User) => {
     const id = normalizeId(updatedUser.mobile || updatedUser.email || (updatedUser as any).id);
     setUser(updatedUser);
     await upsertDocument(COLLECTIONS.USERS, id, updatedUser);
-    const success = await syncUserToSupabase(updatedUser);
-    if (success) {
-      setActiveToast({ title: "Profile Updated", message: "Successfully synced to cloud." });
-    } else {
-      setActiveToast({ title: "Sync Failed", message: "Updating profile locally. Cloud sync pending." });
-    }
+    await syncUserToSupabase(updatedUser);
   };
 
   const handleLogin = async (creds: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string }) => {
-    const ADMIN_IDS = ['9999999999', '9620674013'];
-    const id = normalizeId(creds.mobile || creds.email);
+    const MASTER_ADMIN = '9620674013';
+    const BUSINESS_ADMIN = '9999999999';
     
-    // Check locally/cloud for roles
+    const id = normalizeId(creds.mobile || creds.email);
     const existingCloudUser = await getDocument(COLLECTIONS.USERS, id) as any;
     
-    const isAdmin = ADMIN_IDS.includes(id) || creds.email?.includes('admin@punganuraquaflow.com') || existingCloudUser?.isAdmin || false; 
+    const isMaster = id === MASTER_ADMIN;
+    const isBusiness = id === BUSINESS_ADMIN;
+    const isAdmin = isMaster || isBusiness || existingCloudUser?.isAdmin || false; 
+    
+    const adminRole = isMaster ? 'master' : (isBusiness ? 'business' : (existingCloudUser?.adminRole || null));
     const isDeliveryBoy = existingCloudUser?.isDeliveryBoy || false;
-
+    
     const newUser: User = { 
-      mobile: creds.mobile, 
-      email: creds.email,
-      pin: creds.pin || existingCloudUser?.pin,
-      name: creds.name || existingCloudUser?.name || 'User', 
-      address: creds.address || existingCloudUser?.address || '', 
-      pincode: creds.pincode || existingCloudUser?.pincode || '', 
-      selectedZone: creds.selectedZone || existingCloudUser?.selectedZone || '',
-      avatar: creds.avatar || existingCloudUser?.avatar, 
+      ...creds, 
+      mobile: id,
       isLoggedIn: true, 
-      isAdmin, 
+      isAdmin,
+      adminRole,
       isDeliveryBoy,
       preferredAreas: existingCloudUser?.preferredAreas || []
     };
     
-    // UI immediate feedback
     setUser(newUser);
-    
-    // Persist Locally
     await upsertDocument(COLLECTIONS.USERS, id, newUser);
-    setRegisteredUsers(prev => {
-      const idx = prev.findIndex(u => normalizeId(u.mobile || u.email || (u as any).id) === id);
-      if (idx === -1) return [newUser, ...prev];
-      const next = [...prev];
-      next[idx] = newUser;
-      return next;
-    });
-
-    // Persist Cloud (MANDATORY for capturing new users)
-    const syncSuccess = await syncUserToSupabase(newUser);
-    setIsCloudSynced(syncSuccess);
+    await syncUserToSupabase(newUser);
     
     if (isAdmin) setCurrentView('admin');
     else if (isDeliveryBoy) setCurrentView('delivery');
@@ -299,15 +338,13 @@ const App: React.FC = () => {
 
   const placeOrder = async (paymentMethod: 'COD' | 'UPI/Online', deliverySlot: DeliverySlot): Promise<Order | null> => {
     if (!user || cart.length === 0) return null;
-    
     const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
     const productSummary = cart.map(item => `${item.quantity}x ${item.product.name}`).join(', ');
     const now = new Date();
     const orderId = `ORD-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    
     const newOrder: Order = {
       id: orderId,
-      userMobile: normalizeId(user.mobile || user.email || (user as any).id),
+      userMobile: normalizeId(user.mobile || (user as any).id),
       userName: user.name, 
       userAddress: user.address, 
       userZipcode: user.pincode,
@@ -321,104 +358,30 @@ const App: React.FC = () => {
       deliverySlot,
       history: [{ status: 'Pending', timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, note: 'Order placed' }]
     };
-
-    // Sequential Save: MUST succeed locally first
     await upsertDocument(COLLECTIONS.ORDERS, orderId, newOrder);
-    
-    // Local state update for immediate UI response
     setAllOrders(prev => [newOrder, ...prev].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-    
-    // Cloud Sync
-    const success = await syncOrderToSupabase(newOrder);
-    setIsCloudSynced(success);
-
-    if (!success) {
-      setActiveToast({ title: "Order Synced Locally", message: "Cloud sync failed. Our team will verify manually." });
-    }
-
+    await syncOrderToSupabase(newOrder);
     setCart([]);
     addNotification('Order Confirmed', `Order #${orderId} scheduled for ${deliverySlot}.`, 'order', false, newOrder.userMobile);
     return newOrder;
   };
 
-  const updateOrderStatus = useCallback(async (orderId: string, status: Order['status'], note?: string) => {
-    const now = new Date();
-    const orderToUpdate = allOrders.find(o => o.id === orderId);
-    if (!orderToUpdate) return;
-
-    const updatedOrder = {
-      ...orderToUpdate, status,
-      history: [...orderToUpdate.history, { status, timestamp: `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, note: note || `Status updated to ${status}` }]
-    };
-
-    // UI Update
-    setAllOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-    
-    // Local Storage
-    await upsertDocument(COLLECTIONS.ORDERS, orderId, updatedOrder);
-    
-    // Cloud Sync
-    const success = await syncOrderToSupabase(updatedOrder);
-    if (!success) {
-      setActiveToast({ title: "Sync Error", message: "Cloud update failed. Status saved locally." });
-    }
-    
-    addNotification(`Order ${status}`, `Order ${orderId} is now ${status.toLowerCase()}.`, 'system', false, orderToUpdate.userMobile);
-  }, [allOrders, addNotification]);
-
-  const assignOrder = useCallback(async (orderId: string, staffMobile: string | undefined) => {
-    const orderToUpdate = allOrders.find(o => o.id === orderId);
-    if (!orderToUpdate) {
-      console.warn("AssignOrder: Order not found", orderId);
-      return;
-    }
-
-    const normalizedStaffId = normalizeId(staffMobile);
-    const staff = registeredUsers.find(u => {
-      const uId = normalizeId(u.mobile || u.email || (u as any).id);
-      return uId === normalizedStaffId;
-    });
-
-    const assignmentData = { 
-      ...orderToUpdate, 
-      assignedToMobile: staffMobile, 
-      assignedToName: staff?.name || 'Staff Partner'
-    };
-    
-    // Update State
-    setAllOrders(prev => prev.map(o => o.id === orderId ? assignmentData : o));
-    
-    // Update Local
-    await upsertDocument(COLLECTIONS.ORDERS, orderId, assignmentData);
-    
-    // Update Cloud
-    const success = await syncOrderToSupabase(assignmentData);
-    setIsCloudSynced(success);
-    
-    if (staffMobile) {
-      addNotification('New Task', `Order ${orderId} assigned to you.`, 'delivery', false, staffMobile);
-    }
-  }, [registeredUsers, allOrders, addNotification, normalizeId]);
-
   const handleAddProduct = useCallback(async (product: Product) => {
     await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
     setProducts(prev => [product, ...prev]);
     await syncProductToSupabase(product);
-    setActiveToast({ title: "Product Added", message: `${product.name} added to catalog.` });
   }, []);
 
   const handleUpdateProduct = useCallback(async (product: Product) => {
     await upsertDocument(COLLECTIONS.PRODUCTS, product.id, product);
     setProducts(prev => prev.map(p => p.id === product.id ? product : p));
     await syncProductToSupabase(product);
-    setActiveToast({ title: "Product Updated", message: `${product.name} details saved.` });
   }, []);
 
   const handleDeleteProduct = useCallback(async (id: string) => {
     await deleteDocument(COLLECTIONS.PRODUCTS, id);
     setProducts(prev => prev.filter(p => p.id !== id));
     await deleteProductFromSupabase(id);
-    setActiveToast({ title: "Product Removed", message: "Item deleted successfully." });
   }, []);
 
   const updateDeliveryFee = useCallback(async (f: number) => {
@@ -444,26 +407,23 @@ const App: React.FC = () => {
     const existing = await getDocument(COLLECTIONS.USERS, id);
     const newStaff: User = existing 
       ? { ...existing as User, isDeliveryBoy: true, name, preferredAreas: [primaryStreet] } 
-      : { mobile, name, address: '', pincode: '', selectedZone: primaryStreet, isLoggedIn: false, isDeliveryBoy: true, preferredAreas: [primaryStreet] };
-    
+      : { mobile: id, name, address: '', pincode: '', selectedZone: primaryStreet, isLoggedIn: false, isDeliveryBoy: true, preferredAreas: [primaryStreet] };
     await upsertDocument(COLLECTIONS.USERS, id, newStaff);
     setRegisteredUsers(prev => {
-      const idx = prev.findIndex(u => normalizeId(u.mobile || u.email || (u as any).id) === id);
+      const idx = prev.findIndex(u => normalizeId(u.mobile || (u as any).id) === id);
       if (idx === -1) return [newStaff, ...prev];
       const next = [...prev];
       next[idx] = newStaff;
       return next;
     });
-
     await syncUserToSupabase(newStaff);
-    setActiveToast({ title: "Staff Partner Added", message: `${name} is now registered for ${primaryStreet}.` });
   }, [normalizeId]);
 
   const handleUpdateStaffRole = useCallback(async (mobile: string, isDelivery: boolean) => {
     const id = normalizeId(mobile);
     await updateDocument(COLLECTIONS.USERS, id, { isDeliveryBoy: isDelivery });
     const updated = await getDocument(COLLECTIONS.USERS, id) as User;
-    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || u.email || (u as any).id) === id ? updated : u));
+    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || (u as any).id) === id ? updated : u));
     await syncUserToSupabase(updated);
   }, [normalizeId]);
 
@@ -471,7 +431,7 @@ const App: React.FC = () => {
     const id = normalizeId(mobile);
     await updateDocument(COLLECTIONS.USERS, id, { isAdmin: isAdmin });
     const updated = await getDocument(COLLECTIONS.USERS, id) as User;
-    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || u.email || (u as any).id) === id ? updated : u));
+    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || (u as any).id) === id ? updated : u));
     await syncUserToSupabase(updated);
   }, [normalizeId]);
 
@@ -479,22 +439,29 @@ const App: React.FC = () => {
     const id = normalizeId(mobile);
     await updateDocument(COLLECTIONS.USERS, id, { preferredAreas: areas });
     const updated = await getDocument(COLLECTIONS.USERS, id) as User;
-    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || u.email || (u as any).id) === id ? updated : u));
+    setRegisteredUsers(prev => prev.map(u => normalizeId(u.mobile || (u as any).id) === id ? updated : u));
     await syncUserToSupabase(updated);
-    setActiveToast({ title: "Areas Updated", message: "Staff coverage zones saved." });
   }, [normalizeId]);
 
   const handleDeleteStaff = useCallback(async (mobile: string) => {
     const id = normalizeId(mobile);
     await deleteDocument(COLLECTIONS.USERS, id);
-    setRegisteredUsers(prev => prev.filter(u => normalizeId(u.mobile || u.email || (u as any).id) !== id));
+    setRegisteredUsers(prev => prev.filter(u => normalizeId(u.mobile || (u as any).id) !== id));
     await deleteUserFromSupabase(id);
-    setActiveToast({ title: "Staff Removed", message: "Account deleted from system." });
   }, [normalizeId]);
 
-  const userOrders = useMemo(() => allOrders.filter(o => normalizeId(o.userMobile) === normalizeId(user?.mobile || user?.email || (user as any)?.id)), [allOrders, user, normalizeId]);
-  const relevantNotifications = useMemo(() => notifications.filter(n => (n.forAdmin && user?.isAdmin) || (!n.forAdmin && normalizeId(n.userMobile) === normalizeId(user?.mobile || user?.email || (user as any)?.id))), [notifications, user, normalizeId]);
-  const unreadCount = useMemo(() => relevantNotifications.filter(n => !n.isRead).length, [relevantNotifications]);
+  const userOrders = useMemo(() => allOrders.filter(o => normalizeId(o.userMobile) === normalizeId(user?.mobile || (user as any)?.id)), [allOrders, user, normalizeId]);
+  const relevantNotifications = useMemo(() => notifications.filter(n => (n.forAdmin && user?.isAdmin) || (!n.forAdmin && normalizeId(n.userMobile) === normalizeId(user?.mobile || (user as any)?.id))), [notifications, user, normalizeId]);
+
+  const staffTasks = useMemo(() => {
+    if (!user) return [];
+    const myId = normalizeId(user.mobile || (user as any).id);
+    if (!myId) return [];
+    return allOrders.filter(o => {
+      const assignedId = normalizeId(o.assignedToMobile || (o as any).assignedtomobile);
+      return assignedId !== "" && assignedId === myId;
+    });
+  }, [allOrders, user, normalizeId]);
 
   if (appLoading) return <SplashScreen />;
   if (!user) return <Login onLogin={handleLogin} registeredUsers={registeredUsers} townZones={townZones} />;
@@ -520,7 +487,7 @@ const App: React.FC = () => {
               <button onClick={() => setIsDarkMode(!isDarkMode)} className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors"><i className={`fas ${isDarkMode ? 'fa-sun text-yellow-300' : 'fa-moon'}`}></i></button>
               <button onClick={() => setCurrentView('notifications')} className="h-10 w-10 relative flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors">
                 <i className="fas fa-bell"></i>
-                {unreadCount > 0 && <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full"></span>}
+                {relevantNotifications.filter(n => !n.isRead).length > 0 && <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full"></span>}
               </button>
               <div className="h-9 w-9 rounded-xl border-2 border-white/20 overflow-hidden cursor-pointer active:scale-95 transition-transform" onClick={() => setCurrentView('profile')}>
                 {user.avatar ? <img src={user.avatar} className="h-full w-full object-cover" alt="User" /> : <div className="h-full w-full flex items-center justify-center text-xs font-black uppercase bg-white/10">{user.name.charAt(0)}</div>}
@@ -532,11 +499,11 @@ const App: React.FC = () => {
           <div className="max-w-4xl mx-auto w-full px-4 md:px-8 pt-6 pb-12 safe-bottom">
             {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
             {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} onViewChange={setCurrentView} />}
-            {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} onSupportClick={() => setCurrentView('support')} onUpdateUser={handleUpdateUser} unreadNotifCount={unreadCount} />}
+            {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} onSupportClick={() => setCurrentView('support')} onUpdateUser={handleUpdateUser} unreadNotifCount={relevantNotifications.filter(n => !n.isRead).length} />}
             {currentView === 'orders' && <Orders orders={userOrders} upiId={upiId} onCancelOrder={(id) => updateOrderStatus(id, 'Cancelled', 'Cancelled by User')} onHelpClick={() => setCurrentView('support')} />}
             {currentView === 'support' && <Support onBack={() => setCurrentView('profile')} />}
-            {currentView === 'delivery' && <DeliveryDashboard orders={allOrders.filter(o => normalizeId(o.assignedToMobile) === normalizeId(user.mobile || user.email || (user as any).id))} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} />}
-            {currentView === 'admin' && <Admin products={products} orders={allOrders} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} townZones={townZones} onUpdateDeliveryFee={updateDeliveryFee} onUpdateUpiId={updateUpiId} onUpdateTownZones={updateTownZones} onAssignOrder={assignOrder} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} onAddStaff={handleAddStaff} onUpdateStaffRole={handleUpdateStaffRole} onUpdateAdminRole={handleUpdateAdminRole} onUpdateStaffAreas={handleUpdateStaffAreas} onDeleteStaff={handleDeleteStaff} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
+            {currentView === 'delivery' && <DeliveryDashboard orders={staffTasks} onUpdateStatus={updateOrderStatus} user={user} isLive={isCloudSynced} onRefresh={refreshCloudData} />}
+            {currentView === 'admin' && <Admin products={products} orders={allOrders} user={user} onUpdateStatus={updateOrderStatus} registeredUsers={registeredUsers} upiId={upiId} deliveryFee={deliveryFee} townZones={townZones} onUpdateDeliveryFee={updateDeliveryFee} onUpdateUpiId={updateUpiId} onUpdateTownZones={updateTownZones} onAssignOrder={assignOrder} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} onAddStaff={handleAddStaff} onUpdateStaffRole={handleUpdateStaffRole} onUpdateAdminRole={handleUpdateAdminRole} onUpdateStaffAreas={handleUpdateStaffAreas} onDeleteStaff={handleDeleteStaff} onBack={() => setCurrentView('profile')} isCloudSynced={isCloudSynced} />}
             {currentView === 'notifications' && <Notifications notifications={relevantNotifications} onMarkRead={() => setNotifications(prev => prev.map(n => ({...n, isRead: true})))} onClear={() => setNotifications([])} onBack={() => setCurrentView('profile')} />}
           </div>
         </main>

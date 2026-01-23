@@ -6,6 +6,7 @@ interface AdminProps {
   orders: Order[];
   products: Product[];
   registeredUsers: User[];
+  user: User; // The logged-in admin user
   upiId: string;
   deliveryFee: number;
   townZones: string[];
@@ -30,6 +31,7 @@ const Admin: React.FC<AdminProps> = ({
   orders, 
   products,
   registeredUsers,
+  user,
   upiId,
   deliveryFee,
   townZones,
@@ -80,9 +82,10 @@ const Admin: React.FC<AdminProps> = ({
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isMaster = user.adminRole === 'master';
+
   const selectedOrder = useMemo(() => orders.find(o => o.id === selectedOrderId), [orders, selectedOrderId]);
 
-  // Synchronize modal state when an order is selected
   useEffect(() => {
     if (selectedOrder) {
       setTempStatus(selectedOrder.status);
@@ -109,94 +112,23 @@ const Admin: React.FC<AdminProps> = ({
     };
   }, [orders]);
 
-  const exportToCSV = (data: any[], filename: string) => {
-    if (!data.length) {
-      alert("No data available to export.");
-      return;
-    }
-    const headers = Object.keys(data[0]);
-    const csvRows = [
-      headers.join(','),
-      ...data.map(row => headers.map(header => {
-        const value = row[header] === null || row[header] === undefined ? '' : row[header];
-        const escaped = ('' + value).replace(/"/g, '""');
-        return `"${escaped}"`;
-      }).join(','))
-    ];
-    
-    const csvString = csvRows.join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+  const deliveryBoys = useMemo(() => registeredUsers.filter(u => u.isDeliveryBoy), [registeredUsers]);
+
+  const getStaffWorkload = (mobile: string) => {
+    return orders.filter(o => 
+      (o.assignedToMobile === mobile || (o as any).assignedtomobile === mobile) && 
+      o.status !== 'Delivered' && 
+      o.status !== 'Cancelled'
+    ).length;
   };
 
-  const handleExportOrders = () => {
-    const exportData = orders.map(o => ({
-      OrderID: o.id,
-      Date: o.date,
-      Customer: o.userName,
-      Mobile: o.userMobile,
-      Address: o.userAddress,
-      Status: o.status,
-      Total: o.total,
-      Payment: o.paymentMethod,
-      Slot: o.deliverySlot || 'N/A',
-      Summary: o.productSummary
-    }));
-    exportToCSV(exportData, 'Punganur_Aquaflow_Orders');
-  };
-
-  const handleExportUsers = () => {
-    const exportData = registeredUsers.map(u => ({
-      Name: u.name,
-      Mobile: u.mobile || u.email,
-      Zone: u.selectedZone,
-      Address: u.address,
-      Pincode: u.pincode,
-      IsAdmin: u.isAdmin ? 'Yes' : 'No',
-      IsStaff: u.isDeliveryBoy ? 'Yes' : 'No'
-    }));
-    exportToCSV(exportData, 'Punganur_Aquaflow_Customers');
-  };
-
-  const handleExportProducts = () => {
-    const exportData = products.map(p => ({
-      Name: p.name,
-      Price: p.price,
-      Unit: p.unit,
-      Category: p.category,
-      Description: p.description
-    }));
-    exportToCSV(exportData, 'Punganur_Aquaflow_Inventory');
-  };
-
-  const getOrderZone = (address: string) => {
-    const addrLower = address.toLowerCase();
+  const getOrderZone = (order: Order) => {
+    const addrLower = order.userAddress.toLowerCase();
     for (const zone of townZones) {
       if (addrLower.includes(zone.toLowerCase())) return zone;
     }
     return null;
   };
-
-  const deliveryBoys = useMemo(() => registeredUsers.filter(u => u.isDeliveryBoy), [registeredUsers]);
-
-  const filteredStaff = useMemo(() => {
-    return registeredUsers
-      .filter(u => u.isAdmin || u.isDeliveryBoy)
-      .filter(u => 
-        u.name.toLowerCase().includes(staffSearch.toLowerCase()) || 
-        (u.mobile && u.mobile.includes(staffSearch)) ||
-        (u.email && u.email.toLowerCase().includes(staffSearch.toLowerCase()))
-      );
-  }, [registeredUsers, staffSearch]);
 
   const handleSmartAssign = async () => {
     if (deliveryBoys.length === 0) {
@@ -213,34 +145,31 @@ const Admin: React.FC<AdminProps> = ({
       return;
     }
 
-    let matchCount = 0;
+    const virtualLoads: Record<string, number> = {};
+    deliveryBoys.forEach(b => {
+      const id = b.mobile || (b as any).id;
+      virtualLoads[id] = getStaffWorkload(id);
+    });
 
     for (const order of unassigned) {
-      const orderZone = getOrderZone(order.userAddress);
-      
-      if (orderZone) {
-        const matchedStaff = deliveryBoys.find(b => b.preferredAreas?.includes(orderZone));
-        
-        if (matchedStaff) {
-          await onAssignOrder(order.id, matchedStaff.mobile || (matchedStaff as any).id);
-          await onUpdateStatus(order.id, 'Processing', `Smart-assigned via Street: ${orderZone}`);
-          matchCount++;
-          continue;
-        }
-      }
+      const orderZone = getOrderZone(order);
+      const candidates = deliveryBoys.map(staff => {
+        const staffId = staff.mobile || (staff as any).id;
+        let score = 0;
+        if (orderZone && staff.preferredAreas?.includes(orderZone)) score += 100;
+        score -= (virtualLoads[staffId] * 5);
+        return { staffId, staffName: staff.name, score, zoneMatch: !!(orderZone && staff.preferredAreas?.includes(orderZone)) };
+      });
 
-      const staffWorkload = deliveryBoys.map(boy => ({
-        boy,
-        count: orders.filter(o => o.assignedToMobile === (boy.mobile || (boy as any).id) && o.status !== 'Delivered' && o.status !== 'Cancelled').length
-      })).sort((a, b) => a.count - b.count);
-      
-      const assignedStaff = staffWorkload[0].boy;
-      await onAssignOrder(order.id, assignedStaff.mobile || (assignedStaff as any).id);
-      await onUpdateStatus(order.id, 'Processing', `Assigned via Load Balancing`);
+      candidates.sort((a, b) => b.score - a.score);
+      const chosen = candidates[0];
+      await onAssignOrder(order.id, chosen.staffId);
+      await onUpdateStatus(order.id, 'Processing', chosen.zoneMatch ? `Optimized Dispatch (Zone: ${orderZone})` : `Balanced Dispatch`);
+      virtualLoads[chosen.staffId]++;
     }
 
     setIsAutoAssigning(false);
-    alert(`Success! Dispatched ${unassigned.length} orders. ${matchCount} were high-precision street matches.`);
+    alert(`Optimized! ${unassigned.length} tasks dispatched with balanced workload.`);
   };
 
   const filteredOrders = useMemo(() => {
@@ -256,47 +185,36 @@ const Admin: React.FC<AdminProps> = ({
         o.id.toLowerCase().includes(search)
       );
     }
-
-    result.sort((a, b) => {
-      const aAssigned = !!a.assignedToMobile;
-      const bAssigned = !!b.assignedToMobile;
-      if (aAssigned !== bAssigned) {
-        return aAssigned ? 1 : -1;
-      }
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
+    result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return result;
   }, [orders, orderSearch, filterUnassigned]);
 
-  const handleAddZone = () => {
-    if (!newZoneName.trim()) return;
-    if (townZones.includes(newZoneName.trim())) {
-      alert("Street already exists.");
-      return;
-    }
-    onUpdateTownZones([...townZones, newZoneName.trim()]);
-    setNewZoneName('');
-  };
+  const filteredStaff = useMemo(() => {
+    return registeredUsers
+      .filter(u => u.isAdmin || u.isDeliveryBoy)
+      .filter(u => 
+        u.name.toLowerCase().includes(staffSearch.toLowerCase()) || 
+        (u.mobile && u.mobile.includes(staffSearch)) ||
+        (u.email && u.email.toLowerCase().includes(staffSearch.toLowerCase()))
+      );
+  }, [registeredUsers, staffSearch]);
 
-  const handleRemoveZone = (zone: string) => {
-    onUpdateTownZones(townZones.filter(z => z !== zone));
-  };
-
-  const toggleStaffArea = (mobile: string, area: string) => {
+  const toggleStaffArea = (mobile: string, zone: string) => {
     const staff = registeredUsers.find(u => (u.mobile || (u as any).id) === mobile);
     if (!staff) return;
     const currentAreas = staff.preferredAreas || [];
-    const newAreas = currentAreas.includes(area)
-      ? currentAreas.filter(a => a !== area)
-      : [...currentAreas, area];
+    const newAreas = currentAreas.includes(zone)
+      ? currentAreas.filter(z => z !== zone)
+      : [...currentAreas, zone];
     onUpdateStaffAreas(mobile, newAreas);
   };
 
   const handleUpdateTask = () => {
     if (!selectedOrder) return;
     onAssignOrder(selectedOrder.id, tempStaff);
-    onUpdateStatus(selectedOrder.id, tempStatus, adminNote || `Updated by Admin`);
+    if (tempStatus !== selectedOrder.status) {
+      onUpdateStatus(selectedOrder.id, tempStatus, adminNote || `Updated manually by Admin`);
+    }
     setSelectedOrderId(null);
   };
 
@@ -320,10 +238,6 @@ const Admin: React.FC<AdminProps> = ({
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1.5 * 1024 * 1024) {
-        alert("Selected file is too large. Please use an image under 1.5MB.");
-        return;
-      }
       setIsProcessingImg(true);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -334,14 +248,9 @@ const Admin: React.FC<AdminProps> = ({
     }
   };
 
-  const handleDeleteClick = (id: string) => {
-    if (window.confirm("Permanent Action: Are you sure you want to delete this product?")) {
-      onDeleteProduct(id);
-    }
-  };
-
   const handleUpdateSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isMaster) return;
     setIsSavingSettings(true);
     onUpdateDeliveryFee(settingsForm.fee);
     onUpdateUpiId(settingsForm.upi);
@@ -354,11 +263,7 @@ const Admin: React.FC<AdminProps> = ({
 
   const handleAddStaffSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!staffForm.primaryStreet) {
-      alert("Please assign a starting Street for this staff member.");
-      return;
-    }
-    if (staffForm.mobile.length === 10 && staffForm.name) {
+    if (staffForm.mobile.length === 10 && staffForm.name && staffForm.primaryStreet) {
       onAddStaff(staffForm.mobile, staffForm.name, staffForm.primaryStreet);
       setIsAddingStaff(false);
       setStaffForm({ name: '', mobile: '', primaryStreet: '' });
@@ -378,13 +283,6 @@ const Admin: React.FC<AdminProps> = ({
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Destination Address</p>
                    <p className="font-bold text-slate-900 dark:text-white text-sm">{selectedOrder.userAddress}</p>
-                   {getOrderZone(selectedOrder.userAddress) && (
-                     <div className="mt-2 flex items-center gap-2">
-                       <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[8px] font-black uppercase rounded-md">
-                         <i className="fas fa-road mr-1"></i> Detected Street: {getOrderZone(selectedOrder.userAddress)}
-                       </span>
-                     </div>
-                   )}
                 </div>
                 <div>
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block ml-1">Update Status</label>
@@ -398,19 +296,31 @@ const Admin: React.FC<AdminProps> = ({
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block ml-1">Select Delivery Partner</label>
                    <select value={tempStaff || ''} onChange={e => setTempStaff(e.target.value || undefined)} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 px-4 text-sm font-bold text-slate-800 dark:text-slate-200 focus:border-blue-500 outline-none shadow-sm">
                       <option value="">-- No One Assigned --</option>
-                      {deliveryBoys.map(boy => (
-                        <option key={boy.mobile || (boy as any).id} value={boy.mobile || (boy as any).id}>{boy.name} {boy.preferredAreas?.length ? `(${boy.preferredAreas[0]})` : ''}</option>
-                      ))}
+                      {deliveryBoys.map(boy => {
+                        const workload = getStaffWorkload(boy.mobile || (boy as any).id);
+                        return (
+                          <option key={boy.mobile || (boy as any).id} value={boy.mobile || (boy as any).id}>
+                            {boy.name} | Load: {workload} tasks
+                          </option>
+                        );
+                      })}
                    </select>
                 </div>
              </div>
-             <button onClick={handleUpdateTask} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Update Dispatch</button>
+             <button onClick={handleUpdateTask} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Update Task</button>
           </div>
         </div>
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800 dark:text-white">Admin Management</h2>
+        <div className="flex flex-col text-left">
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white">Admin Management</h2>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${isMaster ? 'bg-yellow-400 text-white shadow-sm' : 'bg-blue-100 text-blue-600'}`}>
+              {isMaster ? 'Master Control' : 'Operations Manager'}
+            </span>
+          </div>
+        </div>
         <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-90 transition-transform"><i className="fas fa-arrow-left"></i></button>
       </div>
 
@@ -437,148 +347,58 @@ const Admin: React.FC<AdminProps> = ({
               <p className="text-2xl font-black text-orange-500">{stats.pendingCount}</p>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Pending Dispatch</p>
             </div>
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm text-left">
-              <p className="text-2xl font-black text-yellow-600">{stats.processingCount}</p>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Currently Processing</p>
-            </div>
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm text-left">
-              <p className="text-2xl font-black text-blue-500">{stats.outForDeliveryCount}</p>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Out for Delivery</p>
-            </div>
-          </div>
-
-          <div 
-            onClick={() => setActiveTab('Reports')}
-            className="bg-brand-900 text-white p-6 rounded-3xl shadow-xl flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all relative overflow-hidden group"
-          >
-            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            <div className="relative z-10 flex items-center gap-4">
-               <div className="h-12 w-12 bg-white/20 rounded-2xl flex items-center justify-center">
-                 <i className="fas fa-file-export text-xl"></i>
-               </div>
-               <div className="text-left">
-                 <h4 className="text-sm font-black uppercase">Export App Data</h4>
-                 <p className="text-[10px] opacity-60">Download orders and customer lists</p>
-               </div>
-            </div>
-            <i className="fas fa-chevron-right opacity-40 group-hover:translate-x-1 transition-transform"></i>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'Reports' && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 text-left px-1">
-          <div className="bg-white dark:bg-slate-800 p-7 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-6">
-            <div className="flex items-center gap-3">
-               <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
-                 <i className="fas fa-cloud-arrow-down"></i>
-               </div>
-               <div>
-                 <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest">Reports & Data Sync</h3>
-                 <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 tracking-wider">Export spreadsheets for bookkeeping</p>
-               </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
-               <button 
-                  onClick={handleExportOrders}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-3xl flex items-center justify-between hover:border-blue-500 transition-colors group"
-               >
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-file-csv"></i>
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-slate-800 dark:text-white">Export Orders</p>
-                      <p className="text-[9px] text-slate-400 uppercase font-black">Full history ({orders.length} entries)</p>
-                    </div>
-                  </div>
-                  <i className="fas fa-download text-slate-300 group-hover:text-blue-500 transition-colors"></i>
-               </button>
-
-               <button 
-                  onClick={handleExportUsers}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-3xl flex items-center justify-between hover:border-blue-500 transition-colors group"
-               >
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-users"></i>
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-slate-800 dark:text-white">Customer Directory</p>
-                      <p className="text-[9px] text-slate-400 uppercase font-black">{registeredUsers.length} profiles listed</p>
-                    </div>
-                  </div>
-                  <i className="fas fa-download text-slate-300 group-hover:text-blue-500 transition-colors"></i>
-               </button>
-
-               <button 
-                  onClick={handleExportProducts}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-3xl flex items-center justify-between hover:border-blue-500 transition-colors group"
-               >
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-boxes-stacked"></i>
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-slate-800 dark:text-white">Export Inventory</p>
-                      <p className="text-[9px] text-slate-400 uppercase font-black">{products.length} catalog items</p>
-                    </div>
-                  </div>
-                  <i className="fas fa-download text-slate-300 group-hover:text-blue-500 transition-colors"></i>
-               </button>
-            </div>
-          </div>
-          
-          <div className="bg-blue-50 dark:bg-blue-900/10 p-6 rounded-[2rem] border border-blue-100 dark:border-blue-900/30">
-             <div className="flex gap-4">
-                <i className="fas fa-circle-info text-blue-600 mt-1"></i>
-                <div className="text-left">
-                  <p className="text-xs font-bold text-blue-800 dark:text-blue-200">Data Privacy Note</p>
-                  <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 leading-relaxed mt-1">Exported files contain sensitive customer contact details. Ensure they are handled according to Punganur Aquaflow internal security policies.</p>
-                </div>
-             </div>
           </div>
         </div>
       )}
 
       {activeTab === 'Orders' && (
         <div className="space-y-4 animate-in fade-in">
-          <div className="bg-blue-600 dark:bg-blue-500 p-5 rounded-3xl shadow-xl flex items-center justify-between text-white mb-6 overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-            <div className="text-left relative z-10">
-              <h4 className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                <i className="fas fa-bolt-lightning text-yellow-300"></i> Smart Dispatch
-              </h4>
-              <p className="text-[9px] font-medium opacity-80 uppercase tracking-widest mt-0.5">Automated street-to-staff matching</p>
+          <div className="bg-gradient-to-br from-blue-700 to-indigo-600 dark:from-blue-600 dark:to-indigo-800 p-6 rounded-[2rem] shadow-xl flex flex-col sm:flex-row items-center justify-between text-white mb-6 gap-4 overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl animate-pulse"></div>
+            <div className="text-left relative z-10 flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                 <div className="h-2 w-2 bg-yellow-400 rounded-full animate-ping"></div>
+                 <h4 className="text-sm font-black uppercase tracking-[0.2em]">Route-Smart Dispatch</h4>
+              </div>
+              <p className="text-[10px] font-medium opacity-80 uppercase tracking-widest leading-relaxed">AI assigns by street and staff workload</p>
             </div>
-            <button onClick={handleSmartAssign} disabled={isAutoAssigning || deliveryBoys.length === 0} className={`relative z-10 px-6 py-2.5 rounded-xl bg-white text-blue-600 text-[10px] font-black uppercase tracking-wider shadow-lg active:scale-95 disabled:opacity-50 flex items-center gap-2 transition-all`}>
-              {isAutoAssigning ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-play"></i>}
-              Dispatch All
+            <button 
+                onClick={handleSmartAssign} 
+                disabled={isAutoAssigning || deliveryBoys.length === 0} 
+                className={`relative z-10 w-full sm:w-auto px-8 py-4 rounded-2xl bg-white text-blue-700 text-[10px] font-black uppercase tracking-widest shadow-2xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 transition-all hover:bg-blue-50`}
+            >
+              {isAutoAssigning ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-microchip"></i>}
+              Dispatch Optimized
             </button>
           </div>
 
-          <input type="text" placeholder="Filter by ID or Name..." value={orderSearch} onChange={e => setOrderSearch(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+          <div className="relative group">
+            <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input type="text" placeholder="Filter by ID, Street or Customer..." value={orderSearch} onChange={e => setOrderSearch(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl py-3 pl-10 pr-4 text-sm font-bold text-slate-900 dark:text-white shadow-sm focus:border-blue-500 outline-none transition-all placeholder:text-slate-400" />
+          </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {filteredOrders.map(o => (
-              <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border flex flex-col cursor-pointer transition-all shadow-sm border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-900/50 text-left relative overflow-hidden active:scale-[0.98]">
+              <div key={o.id} onClick={() => setSelectedOrderId(o.id)} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border flex flex-col cursor-pointer transition-all shadow-sm border-slate-100 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-900 text-left relative overflow-hidden active:scale-[0.98]">
                 {o.assignedToName ? (
-                  <div className="absolute top-0 right-0 px-3 py-1 bg-green-500 text-white text-[8px] font-black uppercase tracking-widest rounded-bl-xl">
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-green-500 text-white text-[8px] font-black uppercase tracking-widest rounded-bl-xl shadow-sm">
                     <i className="fas fa-truck-fast mr-1"></i> {o.assignedToName}
                   </div>
                 ) : (
-                  <div className="absolute top-0 right-0 px-3 py-1 bg-orange-500 text-white text-[8px] font-black uppercase tracking-widest rounded-bl-xl animate-pulse">
-                    <i className="fas fa-hand-pointer mr-1"></i> Unassigned
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-orange-500 text-white text-[8px] font-black uppercase tracking-widest rounded-bl-xl animate-pulse shadow-sm">
+                    <i className="fas fa-user-clock mr-1"></i> Unassigned
                   </div>
                 )}
                 
                 <div className="pt-2">
-                    <p className="font-black text-sm text-slate-900 dark:text-slate-100">{o.userName}</p>
-                    <p className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-wider mb-2">{o.productSummary}</p>
-                    <div className="flex items-start gap-2 mb-2 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                      <i className="fas fa-location-dot text-blue-500 text-[10px] mt-0.5"></i>
-                      <p className="text-[10px] text-slate-600 dark:text-slate-400 font-black uppercase tracking-widest leading-relaxed line-clamp-2">{o.userAddress}</p>
+                    <div className="flex justify-between items-center mb-1">
+                        <p className="font-black text-sm text-slate-900 dark:text-slate-100">{o.userName}</p>
+                        <p className="text-[10px] font-mono text-slate-400">#{o.id}</p>
+                    </div>
+                    <p className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-wider mb-3">{o.productSummary}</p>
+                    <div className="flex items-start gap-2 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
+                      <i className="fas fa-location-arrow text-blue-500 text-[10px] mt-1"></i>
+                      <p className="text-[10px] text-slate-600 dark:text-slate-400 font-bold uppercase tracking-widest leading-relaxed line-clamp-1">{o.userAddress}</p>
                     </div>
                 </div>
               </div>
@@ -602,12 +422,7 @@ const Admin: React.FC<AdminProps> = ({
                 </div>
                 <div>
                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Assigned Street (Primary Duty)</label>
-                   <select 
-                     value={staffForm.primaryStreet} 
-                     onChange={e => setStaffForm({...staffForm, primaryStreet: e.target.value})}
-                     className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500 transition-all"
-                     required
-                   >
+                   <select value={staffForm.primaryStreet} onChange={e => setStaffForm({...staffForm, primaryStreet: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500 transition-all" required>
                      <option value="">-- Choose Street/Zone --</option>
                      {townZones.map(zone => (
                        <option key={zone} value={zone}>{zone}</option>
@@ -623,51 +438,63 @@ const Admin: React.FC<AdminProps> = ({
             <div className="space-y-4 text-left px-1">
               <input type="text" placeholder="Search team members..." value={staffSearch} onChange={e => setStaffSearch(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
               <div className="space-y-3">
-                {filteredStaff.map(s => (
-                  <div key={s.mobile || (s as any).id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4 relative overflow-hidden">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center font-black text-blue-600 dark:text-blue-400">{s.name.charAt(0)}</div>
-                      <div className="flex-1">
-                        <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">{s.name}</p>
-                        <p className="text-[10px] text-slate-400 font-bold">{s.mobile || s.email}</p>
+                {filteredStaff.map(s => {
+                  const workload = getStaffWorkload(s.mobile || (s as any).id);
+                  const isS = (s.mobile || (s as any).id) === user.mobile;
+                  return (
+                    <div key={s.mobile || (s as any).id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4 relative overflow-hidden transition-all hover:border-blue-100">
+                      <div className="flex items-center gap-3">
+                        <div className="h-11 w-11 bg-blue-100 dark:bg-blue-900/50 rounded-2xl flex items-center justify-center font-black text-blue-600 dark:text-blue-400 text-lg">{s.name.charAt(0)}</div>
+                        <div className="flex-1">
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">{s.name} {isS && '(You)'}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                             <p className="text-[10px] text-slate-400 font-bold">{s.mobile || s.email}</p>
+                             {s.isDeliveryBoy && (
+                               <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${workload > 3 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
+                                 Load: {workload} tasks
+                               </span>
+                             )}
+                          </div>
+                        </div>
+                        <div className="flex gap-1 items-center">
+                           <button onClick={() => onUpdateStaffRole(s.mobile || (s as any).id || '', !s.isDeliveryBoy)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isDeliveryBoy ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Delivery Boy"><i className="fas fa-truck-fast"></i></button>
+                           {isMaster && (
+                             <button onClick={() => onUpdateAdminRole(s.mobile || (s as any).id || '', !s.isAdmin)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isAdmin ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Admin"><i className="fas fa-crown"></i></button>
+                           )}
+                           {isMaster && !isS && (
+                             staffDeleteConfirmId === (s.mobile || (s as any).id) ? (
+                               <div className="flex items-center gap-1 animate-in slide-in-from-right-2">
+                                 <button onClick={() => handleConfirmStaffDelete(s.mobile || (s as any).id || '')} className="p-2 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase">Yes</button>
+                                 <button onClick={() => setStaffDeleteConfirmId(null)} className="p-2 bg-slate-200 text-slate-600 rounded-lg text-[8px] font-black uppercase">No</button>
+                               </div>
+                             ) : (
+                               <button onClick={() => setStaffDeleteConfirmId(s.mobile || (s as any).id || null)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
+                             )
+                           )}
+                        </div>
                       </div>
-                      <div className="flex gap-1 items-center">
-                         <button onClick={() => onUpdateStaffRole(s.mobile || (s as any).id || '', !s.isDeliveryBoy)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isDeliveryBoy ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Delivery Boy"><i className="fas fa-truck"></i></button>
-                         <button onClick={() => onUpdateAdminRole(s.mobile || (s as any).id || '', !s.isAdmin)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isAdmin ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Admin"><i className="fas fa-crown"></i></button>
-                         {staffDeleteConfirmId === (s.mobile || (s as any).id) ? (
-                           <div className="flex items-center gap-1 animate-in slide-in-from-right-2">
-                             <button onClick={() => handleConfirmStaffDelete(s.mobile || (s as any).id || '')} className="p-2 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase">Yes</button>
-                             <button onClick={() => setStaffDeleteConfirmId(null)} className="p-2 bg-slate-200 text-slate-600 rounded-lg text-[8px] font-black uppercase">No</button>
-                           </div>
-                         ) : (
-                           <button onClick={() => setStaffDeleteConfirmId(s.mobile || (s as any).id || null)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
-                         )}
-                      </div>
-                    </div>
-                    
-                    {s.isDeliveryBoy && (
-                      <div className="space-y-2 pt-2 border-t border-slate-50 dark:border-slate-700/50">
-                        <div className="flex justify-between items-center">
+                      
+                      {s.isDeliveryBoy && (
+                        <div className="space-y-2 pt-3 border-t border-slate-50 dark:border-slate-800">
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Street Coverage</p>
-                          <span className="text-[8px] text-blue-500 font-bold uppercase tracking-wider">High-Priority Matches</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {townZones.map(zone => (
+                              <button 
+                                  key={zone}
+                                  onClick={() => toggleStaffArea(s.mobile || (s as any).id || '', zone)}
+                                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black tracking-widest transition-all border ${s.preferredAreas?.includes(zone) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-400'}`}
+                              >
+                                  {zone}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {townZones.map(zone => (
-                            <button 
-                                key={zone}
-                                onClick={() => toggleStaffArea(s.mobile || (s as any).id || '', zone)}
-                                className={`px-2 py-1 rounded-md text-[9px] font-bold transition-all border ${s.preferredAreas?.includes(zone) ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-700 text-slate-400'}`}
-                            >
-                                {zone}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              <button onClick={() => setIsAddingStaff(true)} className="w-full bg-blue-600 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Add Staff Member</button>
+              <button onClick={() => setIsAddingStaff(true)} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Add Staff Member</button>
             </div>
           )}
         </div>
@@ -677,33 +504,28 @@ const Admin: React.FC<AdminProps> = ({
         <div className="space-y-6 animate-in fade-in text-left px-1">
            <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-6">
               <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest ml-1">Street Registry</h3>
-              <div className="flex gap-2">
-                 <input 
-                    type="text" 
-                    placeholder="New Street Name..." 
-                    value={newZoneName} 
-                    onChange={e => setNewZoneName(e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                 />
-                 <button onClick={handleAddZone} className="px-6 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Add</button>
-              </div>
+              {isMaster && (
+                <div className="flex gap-2">
+                   <input 
+                      type="text" 
+                      placeholder="New Street Name..." 
+                      value={newZoneName} 
+                      onChange={e => setNewZoneName(e.target.value)}
+                      className="flex-1 bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                   />
+                   <button onClick={() => { if (!newZoneName.trim()) return; if (townZones.includes(newZoneName.trim())) return; onUpdateTownZones([...townZones, newZoneName.trim()]); setNewZoneName(''); }} className="px-6 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Add</button>
+                </div>
+              )}
 
               <div className="space-y-2">
                  {townZones.map(zone => (
                    <div key={zone} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl">
-                      <div className="flex items-center gap-3">
-                        <i className="fas fa-road text-slate-300"></i>
-                        <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{zone}</span>
-                      </div>
-                      <button onClick={() => handleRemoveZone(zone)} className="text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{zone}</span>
+                      {isMaster && (
+                        <button onClick={() => onUpdateTownZones(townZones.filter(z => z !== zone))} className="text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
+                      )}
                    </div>
                  ))}
-                 {townZones.length === 0 && (
-                   <div className="text-center py-10 opacity-30">
-                      <i className="fas fa-map-location-dot text-4xl mb-3 block"></i>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-900 dark:text-white">No streets registered yet</p>
-                   </div>
-                 )}
               </div>
            </div>
         </div>
@@ -744,7 +566,7 @@ const Admin: React.FC<AdminProps> = ({
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => { setEditingProduct(p); setProdForm(p); }} className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><i className="fas fa-edit text-xs"></i></button>
-                    <button onClick={() => handleDeleteClick(p.id)} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><i className="fas fa-trash-can text-xs"></i></button>
+                    <button onClick={() => { if (window.confirm("Are you sure?")) onDeleteProduct(p.id); }} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><i className="fas fa-trash-can text-xs"></i></button>
                   </div>
                 </div>
               ))}
@@ -757,19 +579,45 @@ const Admin: React.FC<AdminProps> = ({
       {activeTab === 'Settings' && (
         <form onSubmit={handleUpdateSettings} className="space-y-6 animate-in fade-in text-left px-1">
            <div className="bg-white dark:bg-slate-800 p-7 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-6 shadow-sm">
-              <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest ml-1">Business Configuration</h3>
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest ml-1">Business Configuration</h3>
+                {!isMaster && (
+                   <span className="text-[7px] font-black uppercase tracking-widest bg-red-50 text-red-500 px-2 py-1 rounded-lg">View Only</span>
+                )}
+              </div>
+              
               <div>
                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block ml-1">Flat Delivery Fee (₹)</label>
-                 <input type="number" value={settingsForm.fee} onChange={e => setSettingsForm({...settingsForm, fee: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all shadow-sm" />
+                 <input 
+                    type="number" 
+                    value={settingsForm.fee} 
+                    readOnly={!isMaster}
+                    onChange={e => setSettingsForm({...settingsForm, fee: Number(e.target.value)})} 
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all shadow-sm ${!isMaster ? 'opacity-60 cursor-not-allowed' : ''}`} 
+                 />
               </div>
               <div>
                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block ml-1">Punganur Aquaflow UPI ID</label>
-                 <input type="text" value={settingsForm.upi} onChange={e => setSettingsForm({...settingsForm, upi: e.target.value})} placeholder="business@upi" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+                 <input 
+                    type="text" 
+                    value={settingsForm.upi} 
+                    readOnly={!isMaster}
+                    onChange={e => setSettingsForm({...settingsForm, upi: e.target.value})} 
+                    placeholder="business@upi" 
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 ${!isMaster ? 'opacity-60 cursor-not-allowed' : ''}`} 
+                 />
               </div>
+              
+              {!isMaster && (
+                <p className="text-[9px] text-slate-400 italic mt-4">* Contact the Master Admin (9620674013) to change these business settings.</p>
+              )}
            </div>
-           <button type="submit" disabled={isSavingSettings} className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] ${saveSettingsStatus === 'saved' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>
-             {isSavingSettings ? <i className="fas fa-circle-notch animate-spin"></i> : saveSettingsStatus === 'saved' ? 'Updates Saved!' : 'Save Business Settings'}
-           </button>
+           
+           {isMaster && (
+             <button type="submit" disabled={isSavingSettings} className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] ${saveSettingsStatus === 'saved' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>
+               {isSavingSettings ? <i className="fas fa-circle-notch animate-spin"></i> : saveSettingsStatus === 'saved' ? 'Updates Saved!' : 'Save Business Settings'}
+             </button>
+           )}
         </form>
       )}
     </div>

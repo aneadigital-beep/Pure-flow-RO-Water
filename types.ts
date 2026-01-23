@@ -25,6 +25,7 @@ export interface User {
   avatar?: string;
   isLoggedIn: boolean;
   isAdmin?: boolean;
+  adminRole?: 'master' | 'business';
   isDeliveryBoy?: boolean;
   preferredAreas?: string[]; // Array of zone/street names for staff
 }

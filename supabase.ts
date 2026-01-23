@@ -14,15 +14,25 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 
 /**
  * Utility to ensure objects are clean and serializable for Supabase.
- * We convert the object to a clean JSON and back to strip 'undefined' 
- * which Supabase/Postgres doesn't like.
+ * We explicitly map camelCase fields to ensure compatibility.
  */
 const preparePayload = (obj: any) => {
   if (!obj) return {};
   try {
-    return JSON.parse(JSON.stringify(obj, (key, value) => 
+    // Standardize naming to prevent lowercase collision issues
+    const cleanObj = JSON.parse(JSON.stringify(obj, (key, value) => 
       value === undefined ? null : value
     ));
+
+    // Ensure our specific camelCase fields exist for the DB
+    if (cleanObj.assignedToMobile === undefined && cleanObj.assignedtomobile !== undefined) {
+      cleanObj.assignedToMobile = cleanObj.assignedtomobile;
+    }
+    if (cleanObj.assignedToName === undefined && cleanObj.assignedtoname !== undefined) {
+      cleanObj.assignedToName = cleanObj.assignedtoname;
+    }
+
+    return cleanObj;
   } catch (e) {
     console.error("Payload Preparation Error:", e);
     return obj;
@@ -35,9 +45,9 @@ export const syncOrderToSupabase = async (order: any) => {
       console.error('Supabase Sync Error: Order missing ID');
       return false;
     }
+    
     const payload = preparePayload(order);
     
-    // Attempting UPSERT. Note: 'orders' table MUST have 'id' as Primary Key.
     const { data, error } = await supabase
       .from('orders')
       .upsert(payload, { onConflict: 'id' })
@@ -47,7 +57,6 @@ export const syncOrderToSupabase = async (order: any) => {
       console.error('Supabase Order Sync Error:', error.message, error.details);
       return false;
     }
-    console.log(`Supabase: Successfully synced order ${order.id}`, data);
     return true;
   } catch (err) {
     console.error('Supabase Order Sync Critical Failure:', err);
@@ -59,14 +68,9 @@ export const syncUserToSupabase = async (user: any) => {
   if (!user) return false;
   try {
     const userId = (user.mobile || user.email || user.id || 'unknown').toString().trim();
-    if (!userId || userId === 'unknown') {
-      console.error('Supabase User Sync Error: No valid ID/Mobile found');
-      return false;
-    }
+    if (!userId || userId === 'unknown') return false;
     
-    // Remove transient UI states that shouldn't live in DB
     const { isLoggedIn, lastUpdated, ...dataToSync } = user;
-    // We map 'mobile' or 'email' to 'id' for the database primary key
     const payload = preparePayload({ ...dataToSync, id: userId });
     
     const { data, error } = await supabase
@@ -74,14 +78,9 @@ export const syncUserToSupabase = async (user: any) => {
       .upsert(payload, { onConflict: 'id' })
       .select();
 
-    if (error) {
-      console.error('Supabase User Sync Error:', error.message, error.details);
-      return false;
-    }
-    console.log(`Supabase: Successfully synced user ${userId}`, data);
+    if (error) return false;
     return true;
   } catch (err) {
-    console.error('Supabase User Sync Critical Failure:', err);
     return false;
   }
 };
@@ -99,7 +98,6 @@ export const syncProductToSupabase = async (product: any) => {
   try {
     const payload = preparePayload(product);
     const { error } = await supabase.from('products').upsert(payload, { onConflict: 'id' });
-    if (error) console.error('Product Sync Error:', error.message);
     return !error;
   } catch (err) {
     return false;
@@ -118,7 +116,6 @@ export const deleteProductFromSupabase = async (id: string) => {
 export const syncSettingToSupabase = async (id: string, value: any) => {
   try {
     const { error } = await supabase.from('settings').upsert({ id, value }, { onConflict: 'id' });
-    if (error) console.error('Settings Sync Error:', error.message);
     return !error;
   } catch (err) {
     return false;
@@ -137,6 +134,13 @@ export const fetchSettingsFromSupabase = async () => {
 export const fetchOrdersFromSupabase = async () => {
   try {
     const { data, error } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
+    if (data) {
+      return data.map(o => ({
+        ...o,
+        assignedToMobile: o.assignedToMobile || o.assignedtomobile || null,
+        assignedToName: o.assignedToName || o.assignedtoname || null
+      }));
+    }
     return error ? null : data;
   } catch (err) {
     return null;
@@ -165,14 +169,9 @@ export const subscribeToTable = (tableName: string, callback: (payload: any) => 
   const channel = supabase
     .channel(`public:${tableName}_realtime`)
     .on('postgres_changes', { event: '*', schema: 'public', table: tableName }, (payload) => {
-      console.log(`Realtime update [${tableName}]:`, payload.eventType, payload.new?.id);
       callback(payload);
     })
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log(`Realtime: Watching table ${tableName}`);
-      }
-    });
+    .subscribe();
     
   return channel;
 };
