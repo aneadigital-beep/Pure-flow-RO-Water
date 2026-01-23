@@ -25,6 +25,7 @@ interface AdminProps {
   onDeleteStaff: (mobile: string) => void;
   onBack: () => void;
   isCloudSynced: boolean;
+  onRefresh?: () => void;
 }
 
 const Admin: React.FC<AdminProps> = ({ 
@@ -49,7 +50,8 @@ const Admin: React.FC<AdminProps> = ({
   onUpdateStaffAreas,
   onDeleteStaff,
   onBack,
-  isCloudSynced
+  isCloudSynced,
+  onRefresh
 }) => {
   const [activeTab, setActiveTab] = useState<'Dashboard' | 'Orders' | 'Inventory' | 'Staff' | 'Zones' | 'Settings' | 'Reports'>('Dashboard');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -84,6 +86,11 @@ const Admin: React.FC<AdminProps> = ({
 
   const isMaster = user.adminRole === 'master';
 
+  // Force refresh cloud data on mount to ensure admin sees latest
+  useEffect(() => {
+    if (onRefresh) onRefresh();
+  }, []);
+
   const selectedOrder = useMemo(() => orders.find(o => o.id === selectedOrderId), [orders, selectedOrderId]);
 
   useEffect(() => {
@@ -108,7 +115,8 @@ const Admin: React.FC<AdminProps> = ({
       processingCount: processing.length,
       outForDeliveryCount: outForDelivery.length,
       cancelledCount: cancelled.length,
-      totalCount: orders.length
+      totalCount: orders.length,
+      recent: orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, 3)
     };
   }, [orders]);
 
@@ -185,7 +193,7 @@ const Admin: React.FC<AdminProps> = ({
         o.id.toLowerCase().includes(search)
       );
     }
-    result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    result.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     return result;
   }, [orders, orderSearch, filterUnassigned]);
 
@@ -321,7 +329,10 @@ const Admin: React.FC<AdminProps> = ({
             </span>
           </div>
         </div>
-        <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-90 transition-transform"><i className="fas fa-arrow-left"></i></button>
+        <div className="flex gap-2">
+           <button onClick={onRefresh} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-90 transition-transform"><i className="fas fa-rotate text-sm"></i></button>
+           <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-90 transition-transform"><i className="fas fa-arrow-left"></i></button>
+        </div>
       </div>
 
       <div className="flex p-1 bg-slate-100 dark:bg-slate-950 rounded-2xl overflow-x-auto scrollbar-hide border border-slate-200 dark:border-slate-800">
@@ -331,7 +342,7 @@ const Admin: React.FC<AdminProps> = ({
       </div>
 
       {activeTab === 'Dashboard' && (
-        <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
+        <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
           <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm text-left group overflow-hidden relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-full -mr-16 -mt-16 blur-3xl"></div>
             <p className="text-3xl font-black text-slate-900 dark:text-white transition-colors group-hover:text-blue-600">₹{stats.revenue}</p>
@@ -347,6 +358,34 @@ const Admin: React.FC<AdminProps> = ({
               <p className="text-2xl font-black text-orange-500">{stats.pendingCount}</p>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Pending Dispatch</p>
             </div>
+          </div>
+
+          <div className="space-y-3">
+             <div className="flex items-center justify-between px-1">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Recent Activity</h3>
+                <button onClick={() => setActiveTab('Orders')} className="text-[9px] font-black text-blue-600 uppercase tracking-widest">See All</button>
+             </div>
+             
+             {stats.recent.length > 0 ? (
+               <div className="space-y-2">
+                 {stats.recent.map(o => (
+                   <div key={o.id} onClick={() => { setSelectedOrderId(o.id); setActiveTab('Orders'); }} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex items-center justify-between shadow-sm active:scale-95 transition-all">
+                      <div className="text-left">
+                        <p className="font-bold text-sm text-slate-900 dark:text-white">{o.userName}</p>
+                        <p className="text-[9px] text-slate-400 uppercase tracking-widest">{o.productSummary}</p>
+                      </div>
+                      <div className="text-right">
+                         <span className={`px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${o.status === 'Pending' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>{o.status}</span>
+                         <p className="text-xs font-black text-slate-900 dark:text-white mt-0.5">₹{o.total}</p>
+                      </div>
+                   </div>
+                 ))}
+               </div>
+             ) : (
+               <div className="py-10 text-center border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-3xl">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">No recent orders received</p>
+               </div>
+             )}
           </div>
         </div>
       )}
