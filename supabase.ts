@@ -88,15 +88,21 @@ export const mapFromDB = (data: any): any => {
   mapped.userMobile = cleanId(mapped.userMobile);
   mapped.id = (mapped.id || data.id || '').toString();
 
+  // Ensure arrays are never null/undefined for UI safety
   if (typeof mapped.items === 'string') {
     try { mapped.items = JSON.parse(mapped.items); } catch (e) { mapped.items = []; }
   }
+  if (!Array.isArray(mapped.items)) mapped.items = [];
+
   if (typeof mapped.history === 'string') {
     try { mapped.history = JSON.parse(mapped.history); } catch (e) { mapped.history = []; }
   }
+  if (!Array.isArray(mapped.history)) mapped.history = [];
+
   if (typeof mapped.preferredAreas === 'string') {
     try { mapped.preferredAreas = JSON.parse(mapped.preferredAreas); } catch (e) { mapped.preferredAreas = []; }
   }
+  if (!Array.isArray(mapped.preferredAreas)) mapped.preferredAreas = [];
 
   return mapped;
 };

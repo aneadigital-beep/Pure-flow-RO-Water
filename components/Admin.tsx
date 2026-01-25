@@ -29,12 +29,12 @@ interface AdminProps {
 }
 
 const Admin: React.FC<AdminProps> = ({ 
-  orders, 
-  products,
-  registeredUsers,
+  orders = [], 
+  products = [],
+  registeredUsers = [],
   upiId,
   deliveryFee,
-  townZones,
+  townZones = [],
   onUpdateOrder,
   onUpdateStatus, 
   onUpdateDeliveryFee,
@@ -83,7 +83,7 @@ const Admin: React.FC<AdminProps> = ({
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedOrder = useMemo(() => orders.find(o => o.id === selectedOrderId), [orders, selectedOrderId]);
+  const selectedOrder = useMemo(() => (orders || []).find(o => o.id === selectedOrderId), [orders, selectedOrderId]);
 
   useEffect(() => {
     if (selectedOrder) {
@@ -94,11 +94,12 @@ const Admin: React.FC<AdminProps> = ({
   }, [selectedOrder]);
 
   const stats = useMemo(() => {
-    const delivered = orders.filter(o => o.status === 'Delivered');
-    const pending = orders.filter(o => o.status === 'Pending');
-    const processing = orders.filter(o => o.status === 'Processing');
-    const outForDelivery = orders.filter(o => o.status === 'Out for Delivery');
-    const cancelled = orders.filter(o => o.status === 'Cancelled');
+    const ords = orders || [];
+    const delivered = ords.filter(o => o.status === 'Delivered');
+    const pending = ords.filter(o => o.status === 'Pending');
+    const processing = ords.filter(o => o.status === 'Processing');
+    const outForDelivery = ords.filter(o => o.status === 'Out for Delivery');
+    const cancelled = ords.filter(o => o.status === 'Cancelled');
 
     return {
       revenue: delivered.reduce((sum, o) => sum + o.total, 0),
@@ -107,16 +108,16 @@ const Admin: React.FC<AdminProps> = ({
       processingCount: processing.length,
       outForDeliveryCount: outForDelivery.length,
       cancelledCount: cancelled.length,
-      totalCount: orders.length
+      totalCount: ords.length
     };
   }, [orders]);
 
-  const deliveryBoys = useMemo(() => registeredUsers.filter(u => u.isDeliveryBoy), [registeredUsers]);
+  const deliveryBoys = useMemo(() => (registeredUsers || []).filter(u => u.isDeliveryBoy), [registeredUsers]);
 
   const getStaffWorkload = (id: string | null) => {
     if (!id) return 0;
     const normalizedId = cleanId(id);
-    return orders.filter(o => 
+    return (orders || []).filter(o => 
       cleanId(o.assignedToMobile) === normalizedId && 
       o.status !== 'Delivered' && 
       o.status !== 'Cancelled'
@@ -125,7 +126,7 @@ const Admin: React.FC<AdminProps> = ({
 
   const getOrderZone = (order: Order) => {
     const addrLower = order.userAddress.toLowerCase();
-    for (const zone of townZones) {
+    for (const zone of (townZones || [])) {
       if (addrLower.includes(zone.toLowerCase())) return zone;
     }
     return null;
@@ -138,7 +139,7 @@ const Admin: React.FC<AdminProps> = ({
     }
 
     setIsAutoAssigning(true);
-    const unassigned = orders.filter(o => !o.assignedToMobile && o.status === 'Pending');
+    const unassigned = (orders || []).filter(o => !o.assignedToMobile && o.status === 'Pending');
     
     if (unassigned.length === 0) {
       alert("No pending unassigned orders found.");
@@ -159,19 +160,18 @@ const Admin: React.FC<AdminProps> = ({
         const staffId = cleanId(staff.mobile || staff.id) || 'unknown';
         let score = 0;
         
-        if (orderZone && staff.preferredAreas?.includes(orderZone)) {
+        if (orderZone && (staff.preferredAreas || []).includes(orderZone)) {
           score += 100;
         }
 
         score -= (virtualLoads[staffId] * 5);
 
-        return { staffId, staffName: staff.name, score, zoneMatch: !!(orderZone && staff.preferredAreas?.includes(orderZone)) };
+        return { staffId, staffName: staff.name, score, zoneMatch: !!(orderZone && (staff.preferredAreas || []).includes(orderZone)) };
       });
 
       candidates.sort((a, b) => b.score - a.score);
       const chosen = candidates[0];
 
-      // Atomic update for both status and assignment
       await onUpdateOrder(order.id, {
         assignedToMobile: chosen.staffId,
         assignedToName: chosen.staffName,
@@ -186,7 +186,7 @@ const Admin: React.FC<AdminProps> = ({
   };
 
   const filteredOrders = useMemo(() => {
-    let result = [...orders];
+    let result = [...(orders || [])];
     if (filterUnassigned) {
       result = result.filter(o => !o.assignedToMobile && o.status !== 'Delivered' && o.status !== 'Cancelled');
     }
@@ -203,7 +203,7 @@ const Admin: React.FC<AdminProps> = ({
   }, [orders, orderSearch, filterUnassigned]);
 
   const filteredStaff = useMemo(() => {
-    return registeredUsers
+    return (registeredUsers || [])
       .filter(u => u.isAdmin || u.isDeliveryBoy)
       .filter(u => 
         u.name.toLowerCase().includes(staffSearch.toLowerCase()) || 
@@ -215,7 +215,7 @@ const Admin: React.FC<AdminProps> = ({
   const toggleStaffArea = (id: string | undefined | null, zone: string) => {
     if (!id) return;
     const normalizedId = cleanId(id);
-    const staff = registeredUsers.find(u => cleanId(u.mobile || u.id) === normalizedId);
+    const staff = (registeredUsers || []).find(u => cleanId(u.mobile || u.id) === normalizedId);
     if (!staff) return;
     const currentAreas = staff.preferredAreas || [];
     const newAreas = currentAreas.includes(zone)
@@ -226,8 +226,6 @@ const Admin: React.FC<AdminProps> = ({
 
   const handleUpdateTask = async () => {
     if (!selectedOrder) return;
-    
-    // Atomic update for assignment and status
     const staff = deliveryBoys.find(b => cleanId(b.mobile || b.id) === cleanId(tempStaff));
     
     await onUpdateOrder(selectedOrder.id, {
@@ -437,7 +435,7 @@ const Admin: React.FC<AdminProps> = ({
                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Assigned Street (Primary Duty)</label>
                    <select value={staffForm.primaryStreet} onChange={e => setStaffForm({...staffForm, primaryStreet: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500 transition-all" required>
                      <option value="">-- Choose Street/Zone --</option>
-                     {townZones.map(zone => (
+                     {(townZones || []).map(zone => (
                        <option key={zone} value={zone}>{zone}</option>
                      ))}
                    </select>
@@ -487,11 +485,11 @@ const Admin: React.FC<AdminProps> = ({
                         <div className="space-y-2 pt-3 border-t border-slate-50 dark:border-slate-800">
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Street Coverage</p>
                           <div className="flex flex-wrap gap-1.5">
-                            {townZones.map(zone => (
+                            {(townZones || []).map(zone => (
                               <button 
                                   key={zone}
                                   onClick={() => toggleStaffArea(staffId, zone)}
-                                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black tracking-widest transition-all border ${s.preferredAreas?.includes(zone) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-400'}`}
+                                  className={`px-3 py-1.5 rounded-xl text-[9px] font-black tracking-widest transition-all border ${(s.preferredAreas || []).includes(zone) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-400'}`}
                               >
                                   {zone}
                               </button>
@@ -521,14 +519,14 @@ const Admin: React.FC<AdminProps> = ({
                     onChange={e => setNewZoneName(e.target.value)}
                     className="flex-1 bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
                  />
-                 <button onClick={() => { if (!newZoneName.trim()) return; if (townZones.includes(newZoneName.trim())) return; onUpdateTownZones([...townZones, newZoneName.trim()]); setNewZoneName(''); }} className="px-6 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Add</button>
+                 <button onClick={() => { if (!newZoneName.trim()) return; if ((townZones || []).includes(newZoneName.trim())) return; onUpdateTownZones([...(townZones || []), newZoneName.trim()]); setNewZoneName(''); }} className="px-6 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Add</button>
               </div>
 
               <div className="space-y-2">
-                 {townZones.map(zone => (
+                 {(townZones || []).map(zone => (
                    <div key={zone} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl">
                       <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{zone}</span>
-                      <button onClick={() => onUpdateTownZones(townZones.filter(z => z !== zone))} className="text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
+                      <button onClick={() => onUpdateTownZones((townZones || []).filter(z => z !== zone))} className="text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
                    </div>
                  ))}
               </div>
@@ -562,7 +560,7 @@ const Admin: React.FC<AdminProps> = ({
             </form>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {products.map(p => (
+              {(products || []).map(p => (
                 <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex gap-4 text-left shadow-sm items-center hover:border-blue-200 dark:hover:border-blue-900/40 transition-colors">
                   <img src={p.image} className="h-14 w-14 rounded-xl object-cover shadow-sm border border-slate-100 dark:border-slate-700" alt="" />
                   <div className="flex-1">

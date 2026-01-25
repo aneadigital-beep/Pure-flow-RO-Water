@@ -10,12 +10,12 @@ interface OrdersProps {
   onHelpClick?: (orderId: string) => void;
 }
 
-const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder, onHelpClick }) => {
+const Orders: React.FC<OrdersProps> = ({ orders = [], upiId, onCancelOrder, onHelpClick }) => {
   const [showQrFor, setShowQrFor] = useState<string | null>(null);
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
 
-  if (orders.length === 0) {
+  if (!orders || orders.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <div className="bg-gray-100 dark:bg-slate-800 h-24 w-24 rounded-full flex items-center justify-center mb-4">
@@ -72,7 +72,7 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder, onHelpCli
               
               <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-2 mb-4">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-200 dark:border-slate-800 pb-1">Items Ordered</p>
-                {order.items.map(item => (
+                {(order.items || []).map(item => (
                   <div key={item.product.id} className="text-sm flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-1.5 bg-blue-500 rounded-full"></div>
@@ -159,7 +159,7 @@ const Orders: React.FC<OrdersProps> = ({ orders, upiId, onCancelOrder, onHelpCli
                   
                   {expandedHistory === order.id && (
                     <div className="mt-3 space-y-3 pl-4 border-l-2 border-slate-100 dark:border-slate-800 ml-2 animate-in slide-in-from-top-2">
-                      {order.history.map((step, idx) => (
+                      {(order.history || []).map((step, idx) => (
                         <div key={idx} className="relative">
                           <div className="absolute -left-[1.35rem] top-1 h-2 w-2 rounded-full bg-blue-500 border-2 border-white dark:border-slate-800"></div>
                           <p className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase">{step.status}</p>

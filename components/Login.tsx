@@ -3,18 +3,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
 
 interface LoginProps {
-  onLogin: (credentials: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string; isAdmin?: boolean }) => void;
+  onLogin: (credentials: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string; isAdmin?: boolean; isDeliveryBoy?: boolean }) => void;
   registeredUsers: User[];
   townZones: string[];
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) => {
-  const [step, setStep] = useState<1 | 3 | 4 | 5 | 6>(1); // 1: Entry, 3: Reg, 4: PIN Entry, 5: Verify for Reset, 6: New PIN Entry
+const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers = [], townZones = [] }) => {
+  const [step, setStep] = useState<1 | 3 | 4 | 5 | 6 | 7>(1); 
+  // 1: Entry, 3: Reg, 4: PIN Entry, 5: Verify for Reset, 6: New PIN Entry, 7: Staff Activation
   const [entryValue, setEntryValue] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   
-  // Reset flow specific states
   const [verifyName, setVerifyName] = useState('');
   const [verifyPincode, setVerifyPincode] = useState('');
   
@@ -46,16 +46,20 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
     const searchTerm = normalizeId(entryValue);
 
     setTimeout(() => {
-      const user = registeredUsers.find(u => normalizeId(u.mobile || u.email || u.id) === searchTerm);
+      const user = (registeredUsers || []).find(u => normalizeId(u.mobile || u.email || u.id) === searchTerm);
       setIsLoading(false);
       
       if (user) {
         setExistingUser(user);
-        setStep(4);
+        // If user exists but has NO PIN, they are a pre-added staff member needing activation
+        if (!user.pin) {
+          setStep(7);
+        } else {
+          setStep(4);
+        }
       } else {
         setStep(3);
-        // If it's a new town with no zones, default to manual entry
-        if (townZones.length === 0) setIsManualZone(true);
+        if (!townZones || townZones.length === 0) setIsManualZone(true);
       }
     }, 800);
   };
@@ -75,6 +79,26 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
       setErrorMessage("Incorrect Security PIN. Please try again.");
       setPin('');
       if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    }
+  };
+
+  const handleStaffActivationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!existingUser) return;
+
+    if (pin.length === 4 && pin === confirmPin) {
+      setIsLoading(true);
+      setTimeout(() => {
+        setIsLoading(false);
+        // Activate the staff account with their new PIN
+        onLogin({
+          ...existingUser,
+          pin: pin,
+          isLoggedIn: true
+        });
+      }, 800);
+    } else if (pin !== confirmPin) {
+      setErrorMessage("The PINs you entered do not match.");
     }
   };
 
@@ -161,7 +185,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
 
       <div className="bg-white dark:bg-slate-900 w-full max-sm:max-w-none max-w-sm rounded-[3rem] p-8 sm:p-10 shadow-2xl relative overflow-hidden transition-all flex flex-col items-center border border-slate-100 dark:border-slate-800">
         
-        {step !== 3 && step !== 5 && step !== 6 && (
+        {step !== 3 && step !== 5 && step !== 6 && step !== 7 && (
           <div className="mb-10 flex flex-col items-center animate-in fade-in duration-500">
             <div className={`h-20 w-20 ${brandColor} rounded-2xl flex items-center justify-center mb-6 shadow-xl transition-transform hover:scale-110 duration-500`}>
               <i className={`fas fa-droplet text-3xl text-white`}></i>
@@ -206,6 +230,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
                 {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Get Started'}
               </button>
             </form>
+
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center">
+              Staff Partners: Contact Admin to authorize your number before logging in.
+            </p>
           </div>
         )}
 
@@ -247,7 +275,38 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
               </button>
             </div>
             
-            <button type="button" onClick={() => setStep(1)} className="w-full text-[10px] text-slate-400 font-black uppercase tracking-widest border-t border-slate-50 dark:border-slate-800 pt-4">Back to Start</button>
+            <button type="button" onClick={() => setStep(1)} className="w-full text-[10px] text-slate-400 font-black uppercase tracking-widest border-t border-slate-50 dark:border-slate-800 pt-4 text-center">Back to Start</button>
+          </form>
+        )}
+
+        {step === 7 && (
+          <form onSubmit={handleStaffActivationSubmit} className="w-full space-y-6 animate-in slide-in-from-right-4 text-left">
+            <div className="text-center mb-8">
+              <div className="h-16 w-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-green-500 shadow-sm">
+                 <i className="fas fa-truck-fast text-green-600 dark:text-green-400 text-xl"></i>
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">Welcome Partner!</h2>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-3">Hello, <span className="text-green-600">{existingUser?.name}</span></p>
+              <p className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-2 leading-relaxed">Admin has authorized your number. Please set a 4-digit PIN to activate your staff dashboard.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">New 4-Digit PIN</label>
+                <input type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="••••" className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-center tracking-[0.8em] font-black text-xl text-slate-900 dark:text-white focus:border-green-600 shadow-sm placeholder:text-slate-400`} required />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">Confirm PIN</label>
+                <input type="password" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="••••" className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-center tracking-[0.8em] font-black text-xl text-slate-900 dark:text-white focus:border-green-600 shadow-sm placeholder:text-slate-400`} required />
+              </div>
+            </div>
+
+            {errorMessage && <p className="text-red-500 text-[10px] font-bold text-center animate-shake">{errorMessage}</p>}
+
+            <button type="submit" disabled={pin.length < 4 || isLoading} className={`w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all`}>
+              {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : 'Activate & Enter Dashboard'}
+            </button>
+            <button type="button" onClick={() => setStep(1)} className="w-full text-[10px] text-slate-400 font-black uppercase tracking-widest text-center">Cancel</button>
           </form>
         )}
 
@@ -329,7 +388,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
                     </button>
                   </div>
                   
-                  {isManualZone || townZones.length === 0 ? (
+                  {isManualZone || (townZones || []).length === 0 ? (
                     <input 
                       type="text" 
                       value={selectedZone} 
@@ -346,7 +405,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
                       required
                     >
                       <option value="">-- Choose Street/Zone --</option>
-                      {townZones.map(zone => (
+                      {(townZones || []).map(zone => (
                         <option key={zone} value={zone}>{zone}</option>
                       ))}
                     </select>
