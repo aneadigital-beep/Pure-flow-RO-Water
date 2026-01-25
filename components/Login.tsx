@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
 
 interface LoginProps {
-  onLogin: (credentials: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string }) => void;
+  onLogin: (credentials: { mobile?: string; email?: string; name: string; address: string; pincode: string; selectedZone: string; avatar?: string; pin?: string; isAdmin?: boolean }) => void;
   registeredUsers: User[];
   townZones: string[];
 }
@@ -22,18 +22,19 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
   const [address, setAddress] = useState('');
   const [pincode, setPincode] = useState('');
   const [selectedZone, setSelectedZone] = useState('');
+  const [isManualZone, setIsManualZone] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [pinError, setPinError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   
   const [existingUser, setExistingUser] = useState<User | null>(null);
 
-  const ADMIN_ID = '9620674013';
+  const MASTER_ADMIN_ID = '9620674013';
 
   useEffect(() => {
     if (pinError) setPinError(false);
     if (errorMessage) setErrorMessage('');
-  }, [pin, entryValue, verifyName, verifyPincode]);
+  }, [pin, entryValue, verifyName, verifyPincode, selectedZone]);
 
   const normalizeId = useCallback((id: string | undefined | null) => (id || '').replace(/\D/g, '').trim(), []);
 
@@ -45,7 +46,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
     const searchTerm = normalizeId(entryValue);
 
     setTimeout(() => {
-      const user = registeredUsers.find(u => normalizeId(u.mobile || u.email) === searchTerm);
+      const user = registeredUsers.find(u => normalizeId(u.mobile || u.email || u.id) === searchTerm);
       setIsLoading(false);
       
       if (user) {
@@ -53,6 +54,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
         setStep(4);
       } else {
         setStep(3);
+        // If it's a new town with no zones, default to manual entry
+        if (townZones.length === 0) setIsManualZone(true);
       }
     }, 800);
   };
@@ -124,16 +127,20 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
         return;
       }
       
+      const normalizedMobile = normalizeId(entryValue);
+      const isAdmin = normalizedMobile === MASTER_ADMIN_ID;
+
       onLogin({
-        mobile: entryValue,
+        mobile: normalizedMobile,
         name, 
         address, 
         pincode,
         selectedZone,
-        pin
+        pin,
+        isAdmin
       });
     } else {
-      if (!selectedZone) setErrorMessage("Please select your delivery zone.");
+      if (!selectedZone) setErrorMessage("Please select or enter your delivery zone.");
     }
   };
 
@@ -311,18 +318,39 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
                 </div>
                 
                 <div>
-                  <label className="text-[10px] uppercase font-black text-slate-400 mb-1.5 block ml-1">Select Delivery Zone</label>
-                  <select 
-                    value={selectedZone} 
-                    onChange={(e) => setSelectedZone(e.target.value)} 
-                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-${themeClass}-600 text-slate-900 dark:text-white font-bold transition-all shadow-sm appearance-none outline-none`}
-                    required
-                  >
-                    <option value="">-- Choose Street/Zone --</option>
-                    {townZones.map(zone => (
-                      <option key={zone} value={zone}>{zone}</option>
-                    ))}
-                  </select>
+                  <div className="flex justify-between items-end mb-1.5 ml-1">
+                    <label className="text-[10px] uppercase font-black text-slate-400">Delivery Zone/Street</label>
+                    <button 
+                      type="button" 
+                      onClick={() => { setIsManualZone(!isManualZone); setSelectedZone(''); }} 
+                      className="text-[8px] font-black text-blue-500 uppercase tracking-widest hover:underline"
+                    >
+                      {isManualZone ? 'Select from list' : 'Street not listed?'}
+                    </button>
+                  </div>
+                  
+                  {isManualZone || townZones.length === 0 ? (
+                    <input 
+                      type="text" 
+                      value={selectedZone} 
+                      onChange={(e) => setSelectedZone(e.target.value)} 
+                      placeholder="Type your Street/Zone name" 
+                      className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-${themeClass}-600 text-slate-900 dark:text-white font-bold transition-all shadow-sm placeholder:text-slate-400`}
+                      required 
+                    />
+                  ) : (
+                    <select 
+                      value={selectedZone} 
+                      onChange={(e) => setSelectedZone(e.target.value)} 
+                      className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-5 py-4 text-sm focus:border-${themeClass}-600 text-slate-900 dark:text-white font-bold transition-all shadow-sm appearance-none outline-none`}
+                      required
+                    >
+                      <option value="">-- Choose Street/Zone --</option>
+                      {townZones.map(zone => (
+                        <option key={zone} value={zone}>{zone}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
@@ -363,7 +391,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, registeredUsers, townZones }) =>
       </div>
 
       <div className="mt-8 flex gap-6">
-        <button onClick={() => { setEntryValue(ADMIN_ID); setStep(1); }} className="text-[9px] font-black uppercase tracking-[0.4em] text-blue-300 hover:text-blue-500 transition-colors">
+        <button onClick={() => { setEntryValue(MASTER_ADMIN_ID); setStep(1); }} className="text-[9px] font-black uppercase tracking-[0.4em] text-blue-300 hover:text-blue-500 transition-colors">
           <i className="fas fa-shield-halved mr-2"></i> Master Admin Access
         </button>
       </div>

@@ -1,15 +1,16 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Order, Product, User } from '../types';
+import { cleanId } from '../supabase';
 
 interface AdminProps {
   orders: Order[];
   products: Product[];
   registeredUsers: User[];
-  user: User; // The logged-in admin user
   upiId: string;
   deliveryFee: number;
   townZones: string[];
+  onUpdateOrder: (id: string, updates: Partial<Order>, note?: string) => Promise<void>;
   onUpdateStatus: (id: string, status: Order['status'], note?: string) => void;
   onUpdateDeliveryFee: (fee: number) => void;
   onUpdateUpiId: (id: string) => void;
@@ -25,17 +26,16 @@ interface AdminProps {
   onDeleteStaff: (mobile: string) => void;
   onBack: () => void;
   isCloudSynced: boolean;
-  onRefresh?: () => void;
 }
 
 const Admin: React.FC<AdminProps> = ({ 
   orders, 
   products,
   registeredUsers,
-  user,
   upiId,
   deliveryFee,
   townZones,
+  onUpdateOrder,
   onUpdateStatus, 
   onUpdateDeliveryFee,
   onUpdateUpiId,
@@ -50,8 +50,7 @@ const Admin: React.FC<AdminProps> = ({
   onUpdateStaffAreas,
   onDeleteStaff,
   onBack,
-  isCloudSynced,
-  onRefresh
+  isCloudSynced
 }) => {
   const [activeTab, setActiveTab] = useState<'Dashboard' | 'Orders' | 'Inventory' | 'Staff' | 'Zones' | 'Settings' | 'Reports'>('Dashboard');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -84,13 +83,6 @@ const Admin: React.FC<AdminProps> = ({
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isMaster = user.adminRole === 'master';
-
-  // Force refresh cloud data on mount to ensure admin sees latest
-  useEffect(() => {
-    if (onRefresh) onRefresh();
-  }, []);
-
   const selectedOrder = useMemo(() => orders.find(o => o.id === selectedOrderId), [orders, selectedOrderId]);
 
   useEffect(() => {
@@ -115,16 +107,17 @@ const Admin: React.FC<AdminProps> = ({
       processingCount: processing.length,
       outForDeliveryCount: outForDelivery.length,
       cancelledCount: cancelled.length,
-      totalCount: orders.length,
-      recent: orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, 3)
+      totalCount: orders.length
     };
   }, [orders]);
 
   const deliveryBoys = useMemo(() => registeredUsers.filter(u => u.isDeliveryBoy), [registeredUsers]);
 
-  const getStaffWorkload = (mobile: string) => {
+  const getStaffWorkload = (id: string | null) => {
+    if (!id) return 0;
+    const normalizedId = cleanId(id);
     return orders.filter(o => 
-      (o.assignedToMobile === mobile || (o as any).assignedtomobile === mobile) && 
+      cleanId(o.assignedToMobile) === normalizedId && 
       o.status !== 'Delivered' && 
       o.status !== 'Cancelled'
     ).length;
@@ -155,24 +148,36 @@ const Admin: React.FC<AdminProps> = ({
 
     const virtualLoads: Record<string, number> = {};
     deliveryBoys.forEach(b => {
-      const id = b.mobile || (b as any).id;
+      const id = cleanId(b.mobile || b.id) || 'unknown';
       virtualLoads[id] = getStaffWorkload(id);
     });
 
     for (const order of unassigned) {
       const orderZone = getOrderZone(order);
+      
       const candidates = deliveryBoys.map(staff => {
-        const staffId = staff.mobile || (staff as any).id;
+        const staffId = cleanId(staff.mobile || staff.id) || 'unknown';
         let score = 0;
-        if (orderZone && staff.preferredAreas?.includes(orderZone)) score += 100;
+        
+        if (orderZone && staff.preferredAreas?.includes(orderZone)) {
+          score += 100;
+        }
+
         score -= (virtualLoads[staffId] * 5);
+
         return { staffId, staffName: staff.name, score, zoneMatch: !!(orderZone && staff.preferredAreas?.includes(orderZone)) };
       });
 
       candidates.sort((a, b) => b.score - a.score);
       const chosen = candidates[0];
-      await onAssignOrder(order.id, chosen.staffId);
-      await onUpdateStatus(order.id, 'Processing', chosen.zoneMatch ? `Optimized Dispatch (Zone: ${orderZone})` : `Balanced Dispatch`);
+
+      // Atomic update for both status and assignment
+      await onUpdateOrder(order.id, {
+        assignedToMobile: chosen.staffId,
+        assignedToName: chosen.staffName,
+        status: 'Processing'
+      }, chosen.zoneMatch ? `Optimized Dispatch (Zone: ${orderZone})` : `Balanced Dispatch`);
+      
       virtualLoads[chosen.staffId]++;
     }
 
@@ -193,7 +198,7 @@ const Admin: React.FC<AdminProps> = ({
         o.id.toLowerCase().includes(search)
       );
     }
-    result.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return result;
   }, [orders, orderSearch, filterUnassigned]);
 
@@ -207,27 +212,35 @@ const Admin: React.FC<AdminProps> = ({
       );
   }, [registeredUsers, staffSearch]);
 
-  const toggleStaffArea = (mobile: string, zone: string) => {
-    const staff = registeredUsers.find(u => (u.mobile || (u as any).id) === mobile);
+  const toggleStaffArea = (id: string | undefined | null, zone: string) => {
+    if (!id) return;
+    const normalizedId = cleanId(id);
+    const staff = registeredUsers.find(u => cleanId(u.mobile || u.id) === normalizedId);
     if (!staff) return;
     const currentAreas = staff.preferredAreas || [];
     const newAreas = currentAreas.includes(zone)
       ? currentAreas.filter(z => z !== zone)
       : [...currentAreas, zone];
-    onUpdateStaffAreas(mobile, newAreas);
+    onUpdateStaffAreas(id, newAreas);
   };
 
-  const handleUpdateTask = () => {
+  const handleUpdateTask = async () => {
     if (!selectedOrder) return;
-    onAssignOrder(selectedOrder.id, tempStaff);
-    if (tempStatus !== selectedOrder.status) {
-      onUpdateStatus(selectedOrder.id, tempStatus, adminNote || `Updated manually by Admin`);
-    }
+    
+    // Atomic update for assignment and status
+    const staff = deliveryBoys.find(b => cleanId(b.mobile || b.id) === cleanId(tempStaff));
+    
+    await onUpdateOrder(selectedOrder.id, {
+      assignedToMobile: tempStaff || undefined,
+      assignedToName: staff?.name || (tempStaff ? 'Staff Partner' : undefined),
+      status: tempStatus
+    }, adminNote || `Updated manually by Admin`);
+    
     setSelectedOrderId(null);
   };
 
-  const handleConfirmStaffDelete = (mobile: string) => {
-    onDeleteStaff(mobile);
+  const handleConfirmStaffDelete = (id: string | undefined | null) => {
+    if (id) onDeleteStaff(id);
     setStaffDeleteConfirmId(null);
   };
 
@@ -258,7 +271,6 @@ const Admin: React.FC<AdminProps> = ({
 
   const handleUpdateSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isMaster) return;
     setIsSavingSettings(true);
     onUpdateDeliveryFee(settingsForm.fee);
     onUpdateUpiId(settingsForm.upi);
@@ -305,9 +317,9 @@ const Admin: React.FC<AdminProps> = ({
                    <select value={tempStaff || ''} onChange={e => setTempStaff(e.target.value || undefined)} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 px-4 text-sm font-bold text-slate-800 dark:text-slate-200 focus:border-blue-500 outline-none shadow-sm">
                       <option value="">-- No One Assigned --</option>
                       {deliveryBoys.map(boy => {
-                        const workload = getStaffWorkload(boy.mobile || (boy as any).id);
+                        const workload = getStaffWorkload(boy.mobile || boy.id);
                         return (
-                          <option key={boy.mobile || (boy as any).id} value={boy.mobile || (boy as any).id}>
+                          <option key={boy.id || boy.mobile} value={boy.mobile || boy.id}>
                             {boy.name} | Load: {workload} tasks
                           </option>
                         );
@@ -321,18 +333,8 @@ const Admin: React.FC<AdminProps> = ({
       )}
 
       <div className="flex items-center justify-between">
-        <div className="flex flex-col text-left">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white">Admin Management</h2>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${isMaster ? 'bg-yellow-400 text-white shadow-sm' : 'bg-blue-100 text-blue-600'}`}>
-              {isMaster ? 'Master Control' : 'Operations Manager'}
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-           <button onClick={onRefresh} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-90 transition-transform"><i className="fas fa-rotate text-sm"></i></button>
-           <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-90 transition-transform"><i className="fas fa-arrow-left"></i></button>
-        </div>
+        <h2 className="text-xl font-bold text-slate-800 dark:text-white">Admin Management</h2>
+        <button onClick={onBack} className="h-10 w-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-90 transition-transform"><i className="fas fa-arrow-left"></i></button>
       </div>
 
       <div className="flex p-1 bg-slate-100 dark:bg-slate-950 rounded-2xl overflow-x-auto scrollbar-hide border border-slate-200 dark:border-slate-800">
@@ -342,7 +344,7 @@ const Admin: React.FC<AdminProps> = ({
       </div>
 
       {activeTab === 'Dashboard' && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
+        <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
           <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm text-left group overflow-hidden relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-full -mr-16 -mt-16 blur-3xl"></div>
             <p className="text-3xl font-black text-slate-900 dark:text-white transition-colors group-hover:text-blue-600">₹{stats.revenue}</p>
@@ -358,34 +360,6 @@ const Admin: React.FC<AdminProps> = ({
               <p className="text-2xl font-black text-orange-500">{stats.pendingCount}</p>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Pending Dispatch</p>
             </div>
-          </div>
-
-          <div className="space-y-3">
-             <div className="flex items-center justify-between px-1">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Recent Activity</h3>
-                <button onClick={() => setActiveTab('Orders')} className="text-[9px] font-black text-blue-600 uppercase tracking-widest">See All</button>
-             </div>
-             
-             {stats.recent.length > 0 ? (
-               <div className="space-y-2">
-                 {stats.recent.map(o => (
-                   <div key={o.id} onClick={() => { setSelectedOrderId(o.id); setActiveTab('Orders'); }} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex items-center justify-between shadow-sm active:scale-95 transition-all">
-                      <div className="text-left">
-                        <p className="font-bold text-sm text-slate-900 dark:text-white">{o.userName}</p>
-                        <p className="text-[9px] text-slate-400 uppercase tracking-widest">{o.productSummary}</p>
-                      </div>
-                      <div className="text-right">
-                         <span className={`px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${o.status === 'Pending' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>{o.status}</span>
-                         <p className="text-xs font-black text-slate-900 dark:text-white mt-0.5">₹{o.total}</p>
-                      </div>
-                   </div>
-                 ))}
-               </div>
-             ) : (
-               <div className="py-10 text-center border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-3xl">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">No recent orders received</p>
-               </div>
-             )}
           </div>
         </div>
       )}
@@ -478,14 +452,14 @@ const Admin: React.FC<AdminProps> = ({
               <input type="text" placeholder="Search team members..." value={staffSearch} onChange={e => setStaffSearch(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
               <div className="space-y-3">
                 {filteredStaff.map(s => {
-                  const workload = getStaffWorkload(s.mobile || (s as any).id);
-                  const isS = (s.mobile || (s as any).id) === user.mobile;
+                  const staffId = cleanId(s.mobile || s.id);
+                  const workload = getStaffWorkload(staffId);
                   return (
-                    <div key={s.mobile || (s as any).id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4 relative overflow-hidden transition-all hover:border-blue-100">
+                    <div key={staffId || 'unknown'} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4 relative overflow-hidden transition-all hover:border-blue-100">
                       <div className="flex items-center gap-3">
                         <div className="h-11 w-11 bg-blue-100 dark:bg-blue-900/50 rounded-2xl flex items-center justify-center font-black text-blue-600 dark:text-blue-400 text-lg">{s.name.charAt(0)}</div>
                         <div className="flex-1">
-                          <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">{s.name} {isS && '(You)'}</p>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">{s.name}</p>
                           <div className="flex items-center gap-2 mt-0.5">
                              <p className="text-[10px] text-slate-400 font-bold">{s.mobile || s.email}</p>
                              {s.isDeliveryBoy && (
@@ -496,19 +470,15 @@ const Admin: React.FC<AdminProps> = ({
                           </div>
                         </div>
                         <div className="flex gap-1 items-center">
-                           <button onClick={() => onUpdateStaffRole(s.mobile || (s as any).id || '', !s.isDeliveryBoy)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isDeliveryBoy ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Delivery Boy"><i className="fas fa-truck-fast"></i></button>
-                           {isMaster && (
-                             <button onClick={() => onUpdateAdminRole(s.mobile || (s as any).id || '', !s.isAdmin)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isAdmin ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Admin"><i className="fas fa-crown"></i></button>
-                           )}
-                           {isMaster && !isS && (
-                             staffDeleteConfirmId === (s.mobile || (s as any).id) ? (
-                               <div className="flex items-center gap-1 animate-in slide-in-from-right-2">
-                                 <button onClick={() => handleConfirmStaffDelete(s.mobile || (s as any).id || '')} className="p-2 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase">Yes</button>
-                                 <button onClick={() => setStaffDeleteConfirmId(null)} className="p-2 bg-slate-200 text-slate-600 rounded-lg text-[8px] font-black uppercase">No</button>
-                               </div>
-                             ) : (
-                               <button onClick={() => setStaffDeleteConfirmId(s.mobile || (s as any).id || null)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
-                             )
+                           <button onClick={() => staffId && onUpdateStaffRole(staffId, !s.isDeliveryBoy)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isDeliveryBoy ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Delivery Boy"><i className="fas fa-truck-fast"></i></button>
+                           <button onClick={() => staffId && onUpdateAdminRole(staffId, !s.isAdmin)} className={`p-2 rounded-lg text-[10px] font-black uppercase tracking-wider ${s.isAdmin ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`} title="Admin"><i className="fas fa-crown"></i></button>
+                           {staffDeleteConfirmId === staffId ? (
+                             <div className="flex items-center gap-1 animate-in slide-in-from-right-2">
+                               <button onClick={() => handleConfirmStaffDelete(staffId)} className="p-2 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase">Yes</button>
+                               <button onClick={() => setStaffDeleteConfirmId(null)} className="p-2 bg-slate-200 text-slate-600 rounded-lg text-[8px] font-black uppercase">No</button>
+                             </div>
+                           ) : (
+                             <button onClick={() => setStaffDeleteConfirmId(staffId)} className="p-2 text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
                            )}
                         </div>
                       </div>
@@ -520,7 +490,7 @@ const Admin: React.FC<AdminProps> = ({
                             {townZones.map(zone => (
                               <button 
                                   key={zone}
-                                  onClick={() => toggleStaffArea(s.mobile || (s as any).id || '', zone)}
+                                  onClick={() => toggleStaffArea(staffId, zone)}
                                   className={`px-3 py-1.5 rounded-xl text-[9px] font-black tracking-widest transition-all border ${s.preferredAreas?.includes(zone) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-400'}`}
                               >
                                   {zone}
@@ -543,26 +513,22 @@ const Admin: React.FC<AdminProps> = ({
         <div className="space-y-6 animate-in fade-in text-left px-1">
            <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-6">
               <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest ml-1">Street Registry</h3>
-              {isMaster && (
-                <div className="flex gap-2">
-                   <input 
-                      type="text" 
-                      placeholder="New Street Name..." 
-                      value={newZoneName} 
-                      onChange={e => setNewZoneName(e.target.value)}
-                      className="flex-1 bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                   />
-                   <button onClick={() => { if (!newZoneName.trim()) return; if (townZones.includes(newZoneName.trim())) return; onUpdateTownZones([...townZones, newZoneName.trim()]); setNewZoneName(''); }} className="px-6 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Add</button>
-                </div>
-              )}
+              <div className="flex gap-2">
+                 <input 
+                    type="text" 
+                    placeholder="New Street Name..." 
+                    value={newZoneName} 
+                    onChange={e => setNewZoneName(e.target.value)}
+                    className="flex-1 bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                 />
+                 <button onClick={() => { if (!newZoneName.trim()) return; if (townZones.includes(newZoneName.trim())) return; onUpdateTownZones([...townZones, newZoneName.trim()]); setNewZoneName(''); }} className="px-6 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Add</button>
+              </div>
 
               <div className="space-y-2">
                  {townZones.map(zone => (
                    <div key={zone} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl">
                       <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{zone}</span>
-                      {isMaster && (
-                        <button onClick={() => onUpdateTownZones(townZones.filter(z => z !== zone))} className="text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
-                      )}
+                      <button onClick={() => onUpdateTownZones(townZones.filter(z => z !== zone))} className="text-red-400 hover:text-red-600 transition-colors"><i className="fas fa-trash-can"></i></button>
                    </div>
                  ))}
               </div>
@@ -618,45 +584,19 @@ const Admin: React.FC<AdminProps> = ({
       {activeTab === 'Settings' && (
         <form onSubmit={handleUpdateSettings} className="space-y-6 animate-in fade-in text-left px-1">
            <div className="bg-white dark:bg-slate-800 p-7 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-6 shadow-sm">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest ml-1">Business Configuration</h3>
-                {!isMaster && (
-                   <span className="text-[7px] font-black uppercase tracking-widest bg-red-50 text-red-500 px-2 py-1 rounded-lg">View Only</span>
-                )}
-              </div>
-              
+              <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest ml-1">Business Configuration</h3>
               <div>
                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block ml-1">Flat Delivery Fee (₹)</label>
-                 <input 
-                    type="number" 
-                    value={settingsForm.fee} 
-                    readOnly={!isMaster}
-                    onChange={e => setSettingsForm({...settingsForm, fee: Number(e.target.value)})} 
-                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all shadow-sm ${!isMaster ? 'opacity-60 cursor-not-allowed' : ''}`} 
-                 />
+                 <input type="number" value={settingsForm.fee} onChange={e => setSettingsForm({...settingsForm, fee: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all shadow-sm" />
               </div>
               <div>
                  <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 block ml-1">Punganur Aquaflow UPI ID</label>
-                 <input 
-                    type="text" 
-                    value={settingsForm.upi} 
-                    readOnly={!isMaster}
-                    onChange={e => setSettingsForm({...settingsForm, upi: e.target.value})} 
-                    placeholder="business@upi" 
-                    className={`w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 ${!isMaster ? 'opacity-60 cursor-not-allowed' : ''}`} 
-                 />
+                 <input type="text" value={settingsForm.upi} onChange={e => setSettingsForm({...settingsForm, upi: e.target.value})} placeholder="business@upi" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl py-4 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" />
               </div>
-              
-              {!isMaster && (
-                <p className="text-[9px] text-slate-400 italic mt-4">* Contact the Master Admin (9620674013) to change these business settings.</p>
-              )}
            </div>
-           
-           {isMaster && (
-             <button type="submit" disabled={isSavingSettings} className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] ${saveSettingsStatus === 'saved' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>
-               {isSavingSettings ? <i className="fas fa-circle-notch animate-spin"></i> : saveSettingsStatus === 'saved' ? 'Updates Saved!' : 'Save Business Settings'}
-             </button>
-           )}
+           <button type="submit" disabled={isSavingSettings} className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] ${saveSettingsStatus === 'saved' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>
+             {isSavingSettings ? <i className="fas fa-circle-notch animate-spin"></i> : saveSettingsStatus === 'saved' ? 'Updates Saved!' : 'Save Business Settings'}
+           </button>
         </form>
       )}
     </div>
