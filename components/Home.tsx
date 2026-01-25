@@ -1,70 +1,51 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Product } from '../types';
+import { Product, Promotion } from '../types';
 
 interface HomeProps {
   products: Product[];
+  promotions: Promotion[];
   onAddToCart: (p: Product) => void;
 }
 
-interface Promotion {
-  id: string;
-  title: string;
-  subtitle: string;
-  icon: string;
-  color: string;
-  tag: string;
-}
+const DEFAULT_PROMOTIONS: Promotion[] = [
+  {
+    id: 'def1',
+    title: 'Summer Refill Special',
+    subtitle: 'Flat ₹50 OFF on your first 20L Can subscription this month!',
+    icon: 'fa-sun',
+    color: 'from-orange-500 to-red-500',
+    tag: 'Limited Offer'
+  },
+  {
+    id: 'def2',
+    title: 'Refer & Earn Water',
+    subtitle: 'Get 2 FREE cans for every neighbor you refer in Punganur.',
+    icon: 'fa-people-group',
+    color: 'from-blue-600 to-indigo-700',
+    tag: 'Community'
+  }
+];
 
-const Home: React.FC<HomeProps> = ({ products, onAddToCart }) => {
+const Home: React.FC<HomeProps> = ({ products = [], promotions = [], onAddToCart }) => {
   const [category, setCategory] = useState<'all' | 'can' | 'subscription' | 'accessory'>('all');
   const [promoIndex, setPromoIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const promotions: Promotion[] = [
-    {
-      id: 'p1',
-      title: 'Summer Refill Special',
-      subtitle: 'Flat ₹50 OFF on your first 20L Can subscription this month!',
-      icon: 'fa-sun',
-      color: 'from-orange-500 to-red-500',
-      tag: 'Limited Offer'
-    },
-    {
-      id: 'p2',
-      title: 'Refer & Earn Water',
-      subtitle: 'Get 2 FREE cans for every neighbor you refer in Punganur.',
-      icon: 'fa-people-group',
-      color: 'from-blue-600 to-indigo-700',
-      tag: 'Community'
-    },
-    {
-      id: 'p3',
-      title: 'Monsoon Protection',
-      subtitle: 'Free TDS check and dispenser sanitization with monthly plans.',
-      icon: 'fa-shield-virus',
-      color: 'from-emerald-500 to-teal-600',
-      tag: 'Health First'
-    },
-    {
-      id: 'p4',
-      title: 'Punganur Events',
-      subtitle: 'Planning a wedding? Special bulk RO rates for 50+ cans.',
-      icon: 'fa-cake-candles',
-      color: 'from-purple-600 to-pink-600',
-      tag: 'Bulk Deal'
-    }
-  ];
+  const activePromos = useMemo(() => {
+    return promotions.length > 0 ? promotions : DEFAULT_PROMOTIONS;
+  }, [promotions]);
 
   useEffect(() => {
+    if (activePromos.length === 0) return;
     const timer = setInterval(() => {
-      setPromoIndex((prev) => (prev + 1) % promotions.length);
+      setPromoIndex((prev) => (prev + 1) % activePromos.length);
     }, 5000);
     return () => clearInterval(timer);
-  }, [promotions.length]);
+  }, [activePromos.length]);
 
   const filtered = useMemo(() => {
-    return products.filter(p => {
+    return (products || []).filter(p => {
       const matchesCategory = category === 'all' || p.category === category;
       const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            p.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -75,50 +56,52 @@ const Home: React.FC<HomeProps> = ({ products, onAddToCart }) => {
   return (
     <div className="space-y-8 pb-10">
       {/* Dynamic Promotion Banner */}
-      <div className="relative h-44 w-full overflow-hidden rounded-[2.5rem] shadow-xl">
-        {promotions.map((promo, idx) => (
-          <div
-            key={promo.id}
-            className={`absolute inset-0 transition-all duration-1000 ease-in-out transform ${
-              idx === promoIndex 
-                ? 'opacity-100 translate-x-0' 
-                : idx < promoIndex 
-                  ? 'opacity-0 -translate-x-full' 
-                  : 'opacity-0 translate-x-full'
-            }`}
-          >
-            <div className={`h-full w-full bg-gradient-to-br ${promo.color} p-7 flex flex-col justify-center text-left relative overflow-hidden`}>
-              <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-              <div className="absolute bottom-0 left-0 w-32 h-32 bg-black/5 rounded-full -ml-16 -mb-16 blur-2xl"></div>
-              
-              <div className="relative z-10 flex items-start justify-between">
-                <div className="space-y-1 max-w-[70%]">
-                  <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[8px] font-black uppercase tracking-[0.2em] text-white mb-2">
-                    {promo.tag}
-                  </span>
-                  <h3 className="text-xl font-black text-white leading-tight uppercase tracking-tighter">{promo.title}</h3>
-                  <p className="text-white/80 text-[10px] font-medium leading-relaxed mt-1">{promo.subtitle}</p>
-                </div>
-                <div className="h-16 w-16 bg-white/20 backdrop-blur-lg rounded-2xl flex items-center justify-center text-white shadow-2xl">
-                  <i className={`fas ${promo.icon} text-2xl`}></i>
+      {activePromos.length > 0 && (
+        <div className="relative h-44 w-full overflow-hidden rounded-[2.5rem] shadow-xl">
+          {activePromos.map((promo, idx) => (
+            <div
+              key={promo.id}
+              className={`absolute inset-0 transition-all duration-1000 ease-in-out transform ${
+                idx === promoIndex 
+                  ? 'opacity-100 translate-x-0' 
+                  : idx < promoIndex 
+                    ? 'opacity-0 -translate-x-full' 
+                    : 'opacity-0 translate-x-full'
+              }`}
+            >
+              <div className={`h-full w-full bg-gradient-to-br ${promo.color} p-7 flex flex-col justify-center text-left relative overflow-hidden`}>
+                <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-black/5 rounded-full -ml-16 -mb-16 blur-2xl"></div>
+                
+                <div className="relative z-10 flex items-start justify-between">
+                  <div className="space-y-1 max-w-[70%]">
+                    <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[8px] font-black uppercase tracking-[0.2em] text-white mb-2">
+                      {promo.tag}
+                    </span>
+                    <h3 className="text-xl font-black text-white leading-tight uppercase tracking-tighter">{promo.title}</h3>
+                    <p className="text-white/80 text-[10px] font-medium leading-relaxed mt-1">{promo.subtitle}</p>
+                  </div>
+                  <div className="h-16 w-16 bg-white/20 backdrop-blur-lg rounded-2xl flex items-center justify-center text-white shadow-2xl">
+                    <i className={`fas ${promo.icon} text-2xl`}></i>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-        
-        <div className="absolute bottom-4 left-7 flex gap-1.5">
-          {promotions.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => setPromoIndex(idx)}
-              className={`h-1 rounded-full transition-all duration-300 ${
-                idx === promoIndex ? 'w-6 bg-white' : 'w-2 bg-white/40'
-              }`}
-            />
           ))}
+          
+          <div className="absolute bottom-4 left-7 flex gap-1.5">
+            {activePromos.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setPromoIndex(idx)}
+                className={`h-1 rounded-full transition-all duration-300 ${
+                  idx === promoIndex ? 'w-6 bg-white' : 'w-2 bg-white/40'
+                }`}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Modern Search Bar */}
       <div className="relative group animate-in fade-in slide-in-from-top-2 duration-500">

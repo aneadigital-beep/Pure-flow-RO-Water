@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { User, Product, CartItem, View, Order, StatusHistory, AppNotification, DeliverySlot } from './types';
+import { User, Product, CartItem, View, Order, StatusHistory, AppNotification, DeliverySlot, Promotion } from './types';
 import { PRODUCTS as INITIAL_PRODUCTS, TOWN_NAME, DELIVERY_FEE as DEFAULT_DELIVERY_FEE, DEFAULT_UPI_ID } from './constants';
 import { COLLECTIONS, syncCollection, upsertDocument, updateDocument, deleteDocument, getDocument, orderBy } from './firebase';
 import { 
@@ -16,6 +16,9 @@ import {
   syncSettingToSupabase,
   fetchSettingsFromSupabase,
   deleteUserFromSupabase,
+  fetchPromotionsFromSupabase,
+  syncPromotionToSupabase,
+  deletePromotionFromSupabase,
   cleanId,
   mapFromDB
 } from './supabase';
@@ -49,6 +52,7 @@ const App: React.FC = () => {
 
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
@@ -125,11 +129,12 @@ const App: React.FC = () => {
 
     const loadCloudData = async () => {
       try {
-        const [cloudOrders, cloudUsers, cloudProducts, cloudSettings] = await Promise.all([
+        const [cloudOrders, cloudUsers, cloudProducts, cloudSettings, cloudPromotions] = await Promise.all([
           fetchOrdersFromSupabase(),
           fetchUsersFromSupabase(),
           fetchProductsFromSupabase(),
-          fetchSettingsFromSupabase()
+          fetchSettingsFromSupabase(),
+          fetchPromotionsFromSupabase()
         ]);
 
         if (cloudOrders) {
@@ -149,7 +154,10 @@ const App: React.FC = () => {
         if (cloudProducts && cloudProducts.length > 0) {
           setProducts(cloudProducts);
           cloudProducts.forEach(p => upsertDocument(COLLECTIONS.PRODUCTS, p.id, p));
-          localStorage.setItem('pf_products_initialized', 'true');
+        }
+
+        if (cloudPromotions && cloudPromotions.length > 0) {
+          setPromotions(cloudPromotions);
         }
 
         if (cloudSettings) {
@@ -351,6 +359,21 @@ const App: React.FC = () => {
     await deleteProductFromSupabase(id);
   }, []);
 
+  const handleAddPromotion = useCallback(async (promo: Promotion) => {
+    setPromotions(prev => [promo, ...prev]);
+    await syncPromotionToSupabase(promo);
+  }, []);
+
+  const handleUpdatePromotion = useCallback(async (promo: Promotion) => {
+    setPromotions(prev => prev.map(p => p.id === promo.id ? promo : p));
+    await syncPromotionToSupabase(promo);
+  }, []);
+
+  const handleDeletePromotion = useCallback(async (id: string) => {
+    setPromotions(prev => prev.filter(p => p.id !== id));
+    await deletePromotionFromSupabase(id);
+  }, []);
+
   const updateDeliveryFee = useCallback(async (f: number) => {
     setDeliveryFee(f);
     await upsertDocument(COLLECTIONS.SETTINGS, 'deliveryFee', { value: f });
@@ -474,7 +497,7 @@ const App: React.FC = () => {
 
         <main className="flex-1 overflow-y-auto scrollbar-hide relative bg-slate-50 dark:bg-slate-900">
           <div className="max-w-4xl mx-auto w-full px-4 md:px-8 pt-6 pb-24 min-h-full flex flex-col">
-            {currentView === 'home' && <Home products={products} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
+            {currentView === 'home' && <Home products={products} promotions={promotions} onAddToCart={(p) => setCart(prev => [...prev, { product: p, quantity: 1 }])} />}
             {currentView === 'cart' && <Cart items={cart} upiId={upiId} onUpdate={(id, d) => setCart(prev => prev.map(i => i.product.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} onRemove={(id) => setCart(prev => prev.filter(i => i.product.id !== id))} onPlaceOrder={placeOrder} deliveryFee={deliveryFee} onViewChange={setCurrentView} />}
             {currentView === 'profile' && <Profile user={user} onLogout={handleLogout} onAdminClick={() => setCurrentView('admin')} onDeliveryClick={() => setCurrentView('delivery')} onNotificationsClick={() => setCurrentView('notifications')} onSupportClick={() => setCurrentView('support')} onUpdateUser={handleUpdateUser} unreadNotifCount={notifications.filter(n => !n.isRead && normalizeId(n.userMobile) === myNormalizedId).length} />}
             {currentView === 'orders' && <Orders orders={allOrders.filter(o => normalizeId(o.userMobile) === myNormalizedId)} upiId={upiId} onCancelOrder={(id) => updateOrderStatus(id, 'Cancelled', 'Cancelled by User')} onHelpClick={() => setCurrentView('support')} />}
@@ -484,6 +507,7 @@ const App: React.FC = () => {
               <Admin 
                 products={products} 
                 orders={allOrders} 
+                promotions={promotions}
                 onUpdateOrder={updateOrder} 
                 onUpdateStatus={updateOrderStatus}
                 registeredUsers={registeredUsers} 
@@ -497,6 +521,9 @@ const App: React.FC = () => {
                 onAddProduct={handleAddProduct} 
                 onUpdateProduct={handleUpdateProduct} 
                 onDeleteProduct={handleDeleteProduct} 
+                onAddPromotion={handleAddPromotion}
+                onUpdatePromotion={handleUpdatePromotion}
+                onDeletePromotion={handleDeletePromotion}
                 onAddStaff={handleAddStaff} 
                 onUpdateStaffRole={handleUpdateStaffRole} 
                 onUpdateAdminRole={handleUpdateAdminRole} 

@@ -9,6 +9,15 @@ export interface Product {
   category: 'can' | 'subscription' | 'accessory';
 }
 
+export interface Promotion {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: string;
+  color: string;
+  tag: string;
+}
+
 export interface CartItem {
   product: Product;
   quantity: number;

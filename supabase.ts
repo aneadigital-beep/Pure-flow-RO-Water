@@ -39,6 +39,9 @@ const TABLE_SCHEMAS: Record<string, string[]> = {
   products: [
     'id', 'name', 'description', 'price', 'unit', 'image', 'category'
   ],
+  promotions: [
+    'id', 'title', 'subtitle', 'icon', 'color', 'tag'
+  ],
   settings: [
     'id', 'value'
   ]
@@ -125,8 +128,6 @@ export const preparePayload = (tableName: string, obj: any) => {
 
   // Common fields
   addToPayload('id', String(obj.id));
-  addToPayload('createdat', obj.createdAt || new Date().toISOString());
-  addToPayload('updatedat', new Date().toISOString());
 
   // Table-aware field mapping
   if (tableName === 'orders') {
@@ -141,6 +142,8 @@ export const preparePayload = (tableName: string, obj: any) => {
     addToPayload('deliveryslot', obj.deliverySlot || null);
     addToPayload('assignedtomobile', cleanId(obj.assignedToMobile));
     addToPayload('assignedtoname', obj.assignedToName || null);
+    addToPayload('createdat', obj.createdAt || new Date().toISOString());
+    addToPayload('updatedat', new Date().toISOString());
     
     if (obj.items) finalPayload.items = typeof obj.items === 'string' ? obj.items : JSON.stringify(obj.items);
     if (obj.history) finalPayload.history = typeof obj.history === 'string' ? obj.history : JSON.stringify(obj.history);
@@ -157,6 +160,8 @@ export const preparePayload = (tableName: string, obj: any) => {
     addToPayload('pin', obj.pin || null);
     addToPayload('isadmin', !!obj.isAdmin);
     addToPayload('isdeliveryboy', !!obj.isDeliveryBoy);
+    addToPayload('createdat', obj.createdAt || new Date().toISOString());
+    addToPayload('updatedat', new Date().toISOString());
     
     if (obj.preferredAreas) finalPayload.preferredareas = typeof obj.preferredAreas === 'string' ? obj.preferredAreas : JSON.stringify(obj.preferredAreas);
   }
@@ -168,6 +173,14 @@ export const preparePayload = (tableName: string, obj: any) => {
     addToPayload('unit', obj.unit || null);
     addToPayload('image', obj.image || null);
     addToPayload('category', obj.category || null);
+  }
+
+  if (tableName === 'promotions') {
+    addToPayload('title', obj.title || null);
+    addToPayload('subtitle', obj.subtitle || null);
+    addToPayload('icon', obj.icon || null);
+    addToPayload('color', obj.color || null);
+    addToPayload('tag', obj.tag || null);
   }
 
   if (tableName === 'settings') {
@@ -240,6 +253,34 @@ export const syncProductToSupabase = async (product: any) => {
   try {
     const payload = preparePayload('products', product);
     const { error } = await supabase.from('products').upsert(payload, { onConflict: 'id' });
+    return !error;
+  } catch (err) {
+    return false;
+  }
+};
+
+export const fetchPromotionsFromSupabase = async () => {
+  try {
+    const { data, error } = await supabase.from('promotions').select('*');
+    return error ? null : data;
+  } catch (err) {
+    return null;
+  }
+};
+
+export const syncPromotionToSupabase = async (promotion: any) => {
+  try {
+    const payload = preparePayload('promotions', promotion);
+    const { error } = await supabase.from('promotions').upsert(payload, { onConflict: 'id' });
+    return !error;
+  } catch (err) {
+    return false;
+  }
+};
+
+export const deletePromotionFromSupabase = async (id: string) => {
+  try {
+    const { error } = await supabase.from('promotions').delete().eq('id', id);
     return !error;
   } catch (err) {
     return false;

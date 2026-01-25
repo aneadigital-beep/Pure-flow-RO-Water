@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Order, Product, User } from '../types';
+import { Order, Product, User, Promotion } from '../types';
 import { cleanId } from '../supabase';
 
 interface AdminProps {
   orders: Order[];
   products: Product[];
+  promotions: Promotion[];
   registeredUsers: User[];
   upiId: string;
   deliveryFee: number;
@@ -19,6 +20,9 @@ interface AdminProps {
   onUpdateProduct: (product: Product) => void;
   onAddProduct: (product: Product) => void;
   onDeleteProduct: (id: string) => void;
+  onAddPromotion: (promo: Promotion) => void;
+  onUpdatePromotion: (promo: Promotion) => void;
+  onDeletePromotion: (id: string) => void;
   onAddStaff: (mobile: string, name: string, primaryStreet: string) => void;
   onUpdateStaffRole: (mobile: string, isDelivery: boolean) => void;
   onUpdateAdminRole: (mobile: string, isAdmin: boolean) => void;
@@ -31,6 +35,7 @@ interface AdminProps {
 const Admin: React.FC<AdminProps> = ({ 
   orders = [], 
   products = [],
+  promotions = [],
   registeredUsers = [],
   upiId,
   deliveryFee,
@@ -44,6 +49,9 @@ const Admin: React.FC<AdminProps> = ({
   onUpdateProduct,
   onAddProduct,
   onDeleteProduct,
+  onAddPromotion,
+  onUpdatePromotion,
+  onDeletePromotion,
   onAddStaff,
   onUpdateStaffRole,
   onUpdateAdminRole,
@@ -52,7 +60,7 @@ const Admin: React.FC<AdminProps> = ({
   onBack,
   isCloudSynced
 }) => {
-  const [activeTab, setActiveTab] = useState<'Dashboard' | 'Orders' | 'Inventory' | 'Staff' | 'Zones' | 'Settings' | 'Reports'>('Dashboard');
+  const [activeTab, setActiveTab] = useState<'Dashboard' | 'Orders' | 'Inventory' | 'Promotions' | 'Staff' | 'Zones' | 'Settings' | 'Reports'>('Dashboard');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [orderSearch, setOrderSearch] = useState('');
   const [filterUnassigned, setFilterUnassigned] = useState(false);
@@ -75,6 +83,12 @@ const Admin: React.FC<AdminProps> = ({
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [prodForm, setProdForm] = useState<Partial<Product>>({
     name: '', description: '', price: 0, unit: 'Can', image: '', category: 'can'
+  });
+
+  const [isAddingPromo, setIsAddingPromo] = useState(false);
+  const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
+  const [promoForm, setPromoForm] = useState<Partial<Promotion>>({
+    title: '', subtitle: '', icon: 'fa-droplet', color: 'from-blue-600 to-indigo-700', tag: 'New Offer'
   });
 
   const [isAddingStaff, setIsAddingStaff] = useState(false);
@@ -254,6 +268,18 @@ const Admin: React.FC<AdminProps> = ({
     setProdForm({ name: '', description: '', price: 0, unit: 'Can', image: '', category: 'can' });
   };
 
+  const handleSavePromo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingPromo) {
+      onUpdatePromotion({ ...editingPromo, ...promoForm } as Promotion);
+      setEditingPromo(null);
+    } else {
+      onAddPromotion({ ...promoForm, id: `promo-${Date.now()}` } as Promotion);
+      setIsAddingPromo(false);
+    }
+    setPromoForm({ title: '', subtitle: '', icon: 'fa-droplet', color: 'from-blue-600 to-indigo-700', tag: 'New Offer' });
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -336,7 +362,7 @@ const Admin: React.FC<AdminProps> = ({
       </div>
 
       <div className="flex p-1 bg-slate-100 dark:bg-slate-950 rounded-2xl overflow-x-auto scrollbar-hide border border-slate-200 dark:border-slate-800">
-        {(['Dashboard', 'Orders', 'Inventory', 'Staff', 'Zones', 'Settings', 'Reports'] as const).map(tab => (
+        {(['Dashboard', 'Orders', 'Inventory', 'Promotions', 'Staff', 'Zones', 'Settings', 'Reports'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[90px] py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${activeTab === tab ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 dark:text-slate-400'}`}>{tab}</button>
         ))}
       </div>
@@ -415,6 +441,71 @@ const Admin: React.FC<AdminProps> = ({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'Promotions' && (
+        <div className="space-y-4 animate-in fade-in">
+          {isAddingPromo || editingPromo ? (
+            <form onSubmit={handleSavePromo} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-4 text-left px-1 shadow-xl">
+              <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-widest ml-1">{editingPromo ? 'Edit Promotion' : 'New Banner Promotion'}</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Title</label>
+                  <input type="text" value={promoForm.title} onChange={e => setPromoForm({...promoForm, title: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500" required />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Subtitle</label>
+                  <input type="text" value={promoForm.subtitle} onChange={e => setPromoForm({...promoForm, subtitle: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500" required />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Tag (e.g. OFFER)</label>
+                    <input type="text" value={promoForm.tag} onChange={e => setPromoForm({...promoForm, tag: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500" required />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Icon (FontAwesome)</label>
+                    <input type="text" value={promoForm.icon} onChange={e => setPromoForm({...promoForm, icon: e.target.value})} placeholder="fa-gift" className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500" required />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Banner Color Gradient</label>
+                  <select value={promoForm.color} onChange={e => setPromoForm({...promoForm, color: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white shadow-sm outline-none focus:border-blue-500">
+                    <option value="from-blue-600 to-indigo-700">Ocean Blue (Blue/Indigo)</option>
+                    <option value="from-orange-500 to-red-500">Sunrise (Orange/Red)</option>
+                    <option value="from-emerald-500 to-teal-600">Fresh (Emerald/Teal)</option>
+                    <option value="from-purple-600 to-pink-600">Event (Purple/Pink)</option>
+                    <option value="from-slate-700 to-slate-900">Premium (Slate/Black)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => { setIsAddingPromo(false); setEditingPromo(null); }} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-900 dark:text-white">Cancel</button>
+                <button type="submit" className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all">Save Banner</button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-3">
+              {(promotions || []).map(promo => (
+                <div key={promo.id} className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 flex items-center gap-4 text-left shadow-sm">
+                  <div className={`h-12 w-12 bg-gradient-to-br ${promo.color} rounded-xl flex items-center justify-center text-white shrink-0`}>
+                    <i className={`fas ${promo.icon} text-lg`}></i>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate">{promo.title}</h4>
+                    <p className="text-[10px] text-slate-400 font-medium truncate">{promo.subtitle}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => { setEditingPromo(promo); setPromoForm(promo); }} className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"><i className="fas fa-edit text-xs"></i></button>
+                    <button onClick={() => onDeletePromotion(promo.id)} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"><i className="fas fa-trash-can text-xs"></i></button>
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => setIsAddingPromo(true)} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Create New Promotion</button>
+            </div>
+          )}
         </div>
       )}
 
